@@ -38,6 +38,48 @@ func TestFailureModeTypeRejection(t *testing.T) {
 	}
 }
 
+// Failure mode 3 — topology. A same-island gang must not fragment across
+// islands. The first island is too small to hold it, tempting legacy to spill.
+func TestFailureModeTopology(t *testing.T) {
+	mk := func(id string, island int, cost float64) Device {
+		return Device{ID: id, IslandID: island, Category: CategoryGPU, Trainable: true, MemoryGB: 192, CostPerHr: cost, Precisions: []Precision{PrecisionBF16}}
+	}
+	fleet := []Device{
+		mk("b200-0", 0, 6.0), mk("b200-1", 0, 6.0), // island 0: only 2 — tempts legacy first
+		mk("h100-0", 1, 2.5), mk("h100-1", 1, 2.5), mk("h100-2", 1, 2.5), mk("h100-3", 1, 2.5),
+		mk("mi300x-0", 2, 1.9), mk("mi300x-1", 2, 1.9), mk("mi300x-2", 2, 1.9), mk("mi300x-3", 2, 1.9), // cheaper
+	}
+	dev := byID(fleet)
+	job := Workload{Name: "gang", Kind: KindTrain, MinMemoryGB: 80, RequiredPrecisions: []Precision{PrecisionBF16}, DeviceCount: 4, SameIsland: true, CostWeight: 1}
+
+	sift, err := NewSiftScheduler(fleet).Place(job)
+	if err != nil {
+		t.Fatalf("sift: %v", err)
+	}
+	if n := distinctIslands(sift.DeviceIDs, dev); n != 1 {
+		t.Errorf("sift fragmented across %d islands: %v", n, sift.DeviceIDs)
+	}
+	if dev[sift.DeviceIDs[0]].IslandID != 2 {
+		t.Errorf("sift chose island %d, want the cheaper island 2", dev[sift.DeviceIDs[0]].IslandID)
+	}
+
+	legacy, err := NewLegacyScheduler(fleet).Place(job)
+	if err != nil {
+		t.Fatalf("legacy: %v", err)
+	}
+	if n := distinctIslands(legacy.DeviceIDs, dev); n <= 1 {
+		t.Errorf("legacy was supposed to fragment, but used %d island(s): %v", n, legacy.DeviceIDs)
+	}
+}
+
+func distinctIslands(ids []string, dev map[string]Device) int {
+	seen := map[int]bool{}
+	for _, id := range ids {
+		seen[dev[id].IslandID] = true
+	}
+	return len(seen)
+}
+
 // Failure mode 2 — cost. A cost-sensitive job must take the cheapest fitting
 // device, not the first free expensive one (placed first to tempt legacy).
 func TestFailureModeCost(t *testing.T) {

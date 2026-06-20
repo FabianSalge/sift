@@ -1,6 +1,9 @@
 package allocator
 
-import "errors"
+import (
+	"errors"
+	"sort"
+)
 
 // ErrNoFeasibleDevice means no free device satisfied the workload — the
 // scheduler's "Pending" outcome.
@@ -25,20 +28,111 @@ func NewSiftScheduler(devices []Device) *SiftScheduler {
 	return &SiftScheduler{devices: devices, allocated: make(map[string]bool)}
 }
 
-// Place binds the best free, feasible device to w, or ErrNoFeasibleDevice.
+// Place binds n = max(1, DeviceCount) free, feasible devices to w, or
+// ErrNoFeasibleDevice if it cannot satisfy the whole request (no partial bind).
 func (s *SiftScheduler) Place(w Workload) (Placement, error) {
+	n := w.DeviceCount
+	if n < 1 {
+		n = 1
+	}
 	var candidates []Device
 	for _, d := range s.devices {
 		if !s.allocated[d.ID] && feasible(d, w) {
 			candidates = append(candidates, d)
 		}
 	}
-	best, ok := bestDevice(candidates, w)
+	chosen, ok := selectN(candidates, w, n)
 	if !ok {
 		return Placement{}, ErrNoFeasibleDevice
 	}
-	s.allocated[best.ID] = true
-	return Placement{Workload: w.Name, DeviceIDs: []string{best.ID}, CostPerHr: best.CostPerHr}, nil
+	ids := make([]string, len(chosen))
+	var cost float64
+	for i, d := range chosen {
+		s.allocated[d.ID] = true
+		ids[i] = d.ID
+		cost += d.CostPerHr
+	}
+	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: cost}, nil
+}
+
+// selectN picks the n devices to bind. A same-island gang (n>1) must come from a
+// single island; otherwise the n best are taken globally.
+func selectN(candidates []Device, w Workload, n int) ([]Device, bool) {
+	if w.SameIsland && n > 1 {
+		return selectIsland(candidates, w, n)
+	}
+	return pickBestN(candidates, w, n)
+}
+
+// pickBestN returns the n best feasible devices by lessScore, or ok=false if
+// fewer than n exist.
+func pickBestN(candidates []Device, w Workload, n int) ([]Device, bool) {
+	if len(candidates) < n {
+		return nil, false
+	}
+	remaining := append([]Device(nil), candidates...)
+	chosen := make([]Device, 0, n)
+	for k := 0; k < n; k++ {
+		best, ok := bestDevice(remaining, w)
+		if !ok {
+			return nil, false
+		}
+		chosen = append(chosen, best)
+		remaining = removeByID(remaining, best.ID)
+	}
+	return chosen, true
+}
+
+// selectIsland returns the n best devices from the cheapest single island that
+// can hold the whole gang, or ok=false if no island has n feasible devices.
+func selectIsland(candidates []Device, w Workload, n int) ([]Device, bool) {
+	byIsland := map[int][]Device{}
+	var islands []int
+	for _, d := range candidates {
+		if d.IslandID == NoIsland {
+			continue
+		}
+		if _, seen := byIsland[d.IslandID]; !seen {
+			islands = append(islands, d.IslandID)
+		}
+		byIsland[d.IslandID] = append(byIsland[d.IslandID], d)
+	}
+	sort.Ints(islands) // deterministic; ties resolve to the lower island ID
+
+	var best []Device
+	var bestCost, bestWaste float64
+	found := false
+	for _, id := range islands {
+		group, ok := pickBestN(byIsland[id], w, n)
+		if !ok {
+			continue
+		}
+		cost, waste := groupScore(group, w)
+		if !found || cost < bestCost || (cost == bestCost && waste < bestWaste) {
+			best, bestCost, bestWaste, found = group, cost, waste, true
+		}
+	}
+	return best, found
+}
+
+// groupScore sums an island group's cost-weighted price and memory waste — the
+// keys used to choose between islands that can each hold the gang.
+func groupScore(group []Device, w Workload) (cost, waste float64) {
+	for _, d := range group {
+		cost += w.CostWeight * d.CostPerHr
+		waste += d.MemoryGB - w.MinMemoryGB
+	}
+	return cost, waste
+}
+
+func removeByID(devs []Device, id string) []Device {
+	var out []Device
+	for _, d := range devs {
+		if d.ID != id {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // feasible reports whether a device satisfies a workload's hard constraints:

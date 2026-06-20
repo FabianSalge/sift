@@ -33,3 +33,25 @@ func TestLegacyScheduler(t *testing.T) {
 		t.Errorf("place 3 err = %v, want ErrNoFeasibleDevice", err)
 	}
 }
+
+// Legacy multi-device grabs the first n free devices in fleet order, ignoring the
+// same-island constraint — so a gang gets fragmented across islands.
+func TestLegacyMultiDevice(t *testing.T) {
+	pool := []Device{
+		{ID: "a", IslandID: 0}, {ID: "b", IslandID: 0},
+		{ID: "c", IslandID: 1}, {ID: "d", IslandID: 1},
+	}
+	job := Workload{Name: "gang", DeviceCount: 3, SameIsland: true}
+
+	p, err := NewLegacyScheduler(pool).Place(job)
+	if err != nil {
+		t.Fatalf("place: %v", err)
+	}
+	if len(p.DeviceIDs) != 3 || p.DeviceIDs[0] != "a" || p.DeviceIDs[1] != "b" || p.DeviceIDs[2] != "c" {
+		t.Errorf("bound %v, want the first three free [a b c]", p.DeviceIDs)
+	}
+
+	if _, err := NewLegacyScheduler(pool).Place(Workload{DeviceCount: 5}); !errors.Is(err, ErrNoFeasibleDevice) {
+		t.Errorf("err = %v, want ErrNoFeasibleDevice (only 4 devices)", err)
+	}
+}

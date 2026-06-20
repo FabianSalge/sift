@@ -12,13 +12,31 @@ func NewLegacyScheduler(devices []Device) *LegacyScheduler {
 	return &LegacyScheduler{devices: devices, allocated: make(map[string]bool)}
 }
 
-// Place binds the first free device, regardless of whether it fits.
+// Place binds the first n = max(1, DeviceCount) free devices in fleet order,
+// regardless of whether they fit or share an island.
 func (s *LegacyScheduler) Place(w Workload) (Placement, error) {
+	n := w.DeviceCount
+	if n < 1 {
+		n = 1
+	}
+	var chosen []Device
 	for _, d := range s.devices {
 		if !s.allocated[d.ID] {
-			s.allocated[d.ID] = true
-			return Placement{Workload: w.Name, DeviceIDs: []string{d.ID}, CostPerHr: d.CostPerHr}, nil
+			chosen = append(chosen, d)
+			if len(chosen) == n {
+				break
+			}
 		}
 	}
-	return Placement{}, ErrNoFeasibleDevice
+	if len(chosen) < n {
+		return Placement{}, ErrNoFeasibleDevice
+	}
+	ids := make([]string, n)
+	var cost float64
+	for i, d := range chosen {
+		s.allocated[d.ID] = true
+		ids[i] = d.ID
+		cost += d.CostPerHr
+	}
+	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: cost}, nil
 }

@@ -72,6 +72,61 @@ func TestSiftSchedulerPlace(t *testing.T) {
 	}
 }
 
+// A multi-device workload with no island constraint binds the n cheapest fitting
+// devices, summing their cost.
+func TestSiftSchedulerMultiDevice(t *testing.T) {
+	pool := []Device{
+		{ID: "mi300x-0", Trainable: true, MemoryGB: 192, CostPerHr: 1.9, Precisions: []Precision{PrecisionBF16}},
+		{ID: "h100-0", Trainable: true, MemoryGB: 80, CostPerHr: 2.5, Precisions: []Precision{PrecisionBF16}},
+		{ID: "b200-0", Trainable: true, MemoryGB: 192, CostPerHr: 6.0, Precisions: []Precision{PrecisionBF16}},
+	}
+	job := Workload{Name: "train", Kind: KindTrain, MinMemoryGB: 80, RequiredPrecisions: []Precision{PrecisionBF16}, DeviceCount: 2, CostWeight: 1}
+
+	p, err := NewSiftScheduler(pool).Place(job)
+	if err != nil {
+		t.Fatalf("place: %v", err)
+	}
+	if len(p.DeviceIDs) != 2 {
+		t.Fatalf("bound %d devices, want 2: %+v", len(p.DeviceIDs), p)
+	}
+	bound := map[string]bool{p.DeviceIDs[0]: true, p.DeviceIDs[1]: true}
+	if !bound["mi300x-0"] || !bound["h100-0"] {
+		t.Errorf("bound %v, want the two cheapest mi300x-0 + h100-0", p.DeviceIDs)
+	}
+	if p.CostPerHr != 4.4 {
+		t.Errorf("cost %.2f, want 4.40 (1.9 + 2.5)", p.CostPerHr)
+	}
+}
+
+// A SameIsland gang must land wholly within one island, even when cheaper
+// devices exist in an island too small to hold the whole gang.
+func TestSiftSchedulerSameIsland(t *testing.T) {
+	pool := []Device{
+		{ID: "h100-0", IslandID: 1, Trainable: true, MemoryGB: 80, CostPerHr: 1.0, Precisions: []Precision{PrecisionBF16}},
+		{ID: "h100-1", IslandID: 1, Trainable: true, MemoryGB: 80, CostPerHr: 1.0, Precisions: []Precision{PrecisionBF16}},
+		{ID: "mi300x-0", IslandID: 2, Trainable: true, MemoryGB: 192, CostPerHr: 2.0, Precisions: []Precision{PrecisionBF16}},
+		{ID: "mi300x-1", IslandID: 2, Trainable: true, MemoryGB: 192, CostPerHr: 2.0, Precisions: []Precision{PrecisionBF16}},
+		{ID: "mi300x-2", IslandID: 2, Trainable: true, MemoryGB: 192, CostPerHr: 2.0, Precisions: []Precision{PrecisionBF16}},
+		{ID: "mi300x-3", IslandID: 2, Trainable: true, MemoryGB: 192, CostPerHr: 2.0, Precisions: []Precision{PrecisionBF16}},
+	}
+	dev := byID(pool)
+	job := Workload{Name: "gang", Kind: KindTrain, MinMemoryGB: 80, RequiredPrecisions: []Precision{PrecisionBF16}, DeviceCount: 4, SameIsland: true, CostWeight: 1}
+
+	p, err := NewSiftScheduler(pool).Place(job)
+	if err != nil {
+		t.Fatalf("place: %v", err)
+	}
+	if len(p.DeviceIDs) != 4 {
+		t.Fatalf("bound %d devices, want 4: %+v", len(p.DeviceIDs), p)
+	}
+	for _, id := range p.DeviceIDs {
+		if dev[id].IslandID != 2 {
+			t.Errorf("bound %v — all should be in island 2 (the only island holding 4)", p.DeviceIDs)
+			break
+		}
+	}
+}
+
 func TestSiftSchedulerInfeasible(t *testing.T) {
 	s := NewSiftScheduler([]Device{{ID: "h100-0", Trainable: true, MemoryGB: 80}})
 	if _, err := s.Place(Workload{Kind: KindTrain, MinMemoryGB: 999}); !errors.Is(err, ErrNoFeasibleDevice) {
