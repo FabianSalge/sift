@@ -1,0 +1,3 @@
+[submodule "driver"]
+	path = driver
+	url = git@github.com:FabianSalge/dra-example-driver.git
