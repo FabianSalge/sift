@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// feasible is the hard filter: a device must satisfy trainability (for training
+// Feasible is the hard filter: a device must satisfy trainability (for training
 // jobs), memory, and the required-precision subset.
 func TestFeasible(t *testing.T) {
 	trainJob := Workload{
@@ -33,7 +33,7 @@ func TestFeasible(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := feasible(tc.dev, tc.work); got != tc.want {
+			if got := Feasible(tc.dev, tc.work); got != tc.want {
 				t.Errorf("feasible = %v, want %v", got, tc.want)
 			}
 		})

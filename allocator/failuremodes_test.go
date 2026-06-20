@@ -25,12 +25,12 @@ func TestFailureModeTypeRejection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sift: %v", err)
 	}
-	if got := dev[sift.DeviceIDs[0]]; !feasible(got, job) {
+	if got := dev[sift.DeviceIDs[0]]; !Feasible(got, job) {
 		t.Errorf("sift bound infeasible device %q", got.ID)
 	}
 
 	legacy, _ := NewLegacyScheduler(fleet).Place(job)
-	if feasible(dev[legacy.DeviceIDs[0]], job) {
+	if Feasible(dev[legacy.DeviceIDs[0]], job) {
 		t.Errorf("legacy was supposed to mis-type, but bound a feasible device %q", legacy.DeviceIDs[0])
 	}
 	if legacy.DeviceIDs[0] != "inf-0" {

@@ -37,7 +37,7 @@ func (s *SiftScheduler) Place(w Workload) (Placement, error) {
 	}
 	var candidates []Device
 	for _, d := range s.devices {
-		if !s.allocated[d.ID] && feasible(d, w) {
+		if !s.allocated[d.ID] && Feasible(d, w) {
 			candidates = append(candidates, d)
 		}
 	}
@@ -135,9 +135,9 @@ func removeByID(devs []Device, id string) []Device {
 	return out
 }
 
-// feasible reports whether a device satisfies a workload's hard constraints:
+// Feasible reports whether a device satisfies a workload's hard constraints:
 // trainability (for training jobs), memory, and the required-precision subset.
-func feasible(d Device, w Workload) bool {
+func Feasible(d Device, w Workload) bool {
 	if w.Kind == KindTrain && !d.Trainable {
 		return false
 	}
