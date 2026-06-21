@@ -25,6 +25,9 @@ go.work.sum
 .vscode/
 *.swp
 
+# Claude Code local config & worktrees (kept out of the public repo)
+.claude/
+
 # Local-only design/strategy notes — kept out of the public repo
 /CLAUDE.md
 /docs/decisions.md
