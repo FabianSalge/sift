@@ -21,9 +21,6 @@ why Sift's `Device` carries no free/used state (allocation lives elsewhere).
 `allocator.Workload` requirements → CEL in a ResourceClaim. The allocator is the
 clean domain model; the driver translates it to/from these real objects.
 
-## Gotcha / what confused me
-_(your turn — e.g. slices are published per-node, not cluster-wide; allocation
-state is tracked separately from the slice)_
 
 ## See also
 - `docs/concepts/dra.md`

@@ -36,6 +36,4 @@ go test ./...
 
 ## Docs
 
-- [`docs/decisions.md`](docs/decisions.md) — architecture decisions and rationale.
-- [`docs/backlog.md`](docs/backlog.md) — planned and deferred work.
-- [`docs/worklog.md`](docs/worklog.md) — development journal.
+- [`docs/concepts`](docs/concepts) — conceptual findings made along the way

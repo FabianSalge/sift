@@ -17,8 +17,6 @@ the substrate that makes capability-aware scheduling expressible in Kubernetes.
 Sift's pure `allocator` is the *reference model* of DRA-style matching; the
 driver (Phase 1) expresses that model in real DRA objects against a live cluster.
 
-## Gotcha / what confused me
-_(your turn — e.g. DRA being a within-cluster mechanism, or device-plugin vs DRA)_
 
 ## See also
 - `docs/concepts/resourceslice-resourceclaim.md`

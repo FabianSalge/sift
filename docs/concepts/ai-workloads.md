@@ -1,12 +1,12 @@
 # AI Workload Shapes
 
 ## What it is
-Different AI workloads stress different hardware properties — learn the
-*properties*, not a rigid taxonomy. The main shapes:
-- **Training / fine-tuning** — long-running, latency-insensitive, memory- and
+Different AI workloads stress different hardware properties with certain
+*properties*. The main identified shape for this project:
+- **Training / fine-tuning**: long-running, latency-insensitive, memory- and
   throughput-hungry; needs high precision (bf16) for stability; multi-device and
   communication-heavy (wants fast interconnect); often gang-scheduled.
-- **Inference serving** — latency-sensitive, and it *splits in two*:
+- **Inference serving**: latency-sensitive, and it *splits in two*:
   - **Prefill** (process the prompt): compute-bound; wants raw FLOPs.
   - **Decode** (generate tokens): memory-bandwidth-bound and sequential; tolerates
     low precision (fp8/int8); KV-cache hungry.
@@ -25,10 +25,6 @@ device (and the wrong one is rejected).
 The realistic scenario models a believable mix (interactive inference +
 continuous fine-tuning + cost-sensitive batch) that genuinely *conflicts* over
 the fleet — which is what arms the three failure modes.
-
-## Gotcha / what confused me
-_(your turn — e.g. "inference" hides two very different sub-workloads; precision
-tolerance is what rejects an fp8-only inference ASIC for a bf16 training job)_
 
 ## See also
 - `docs/concepts/heterogeneous-accelerators.md`

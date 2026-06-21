@@ -22,9 +22,6 @@ three Sift catches and the integer model misses.
 `Workload.SameIsland` requires all devices in one island. The scheduler's
 same-island feasibility check is the topology filter.
 
-## Gotcha / what confused me
-_(your turn — e.g. node = one server (not the whole cluster); island vs NUMA are
-related but distinct attributes)_
 
 ## See also
 - `docs/concepts/capability-aware-scheduling.md`

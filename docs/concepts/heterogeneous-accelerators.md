@@ -23,9 +23,6 @@ reasons only over generic attributes, so any new chip slots in by adding a row.
 The single-cluster scenario uses a provider-coherent on-prem mix (NVIDIA GPU +
 AMD MI300X + an inference ASIC).
 
-## Gotcha / what confused me
-_(your turn — e.g. provider-lock (TPU = GCP-only) is real but a cross-cluster
-concern, so it's out of the single-cluster model; numbers are representative)_
 
 ## See also
 - `docs/concepts/capability-aware-scheduling.md`

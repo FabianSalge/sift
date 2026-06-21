@@ -19,9 +19,6 @@ and validate the matching before expressing it as CEL.
 Phase 1 driver = structured-parameters style: publish attribute-rich slices,
 express Workload requirements as ResourceClaim CEL, let kube-scheduler match.
 
-## Gotcha / what confused me
-_(your turn — e.g. "my allocator isn't the in-cluster scheduler" was the
-surprising part; the older non-structured DRA path worked differently)_
 
 ## See also
 - `docs/concepts/dra.md`, `docs/concepts/capability-aware-scheduling.md`
