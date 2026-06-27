@@ -28,9 +28,13 @@ go.work.sum
 # Claude Code local config & worktrees (kept out of the public repo)
 .claude/
 
+# Visual brainstorming companion scratch (local-only)
+.superpowers/
+
 # Local-only design/strategy notes — kept out of the public repo
 /CLAUDE.md
 /docs/decisions.md
 /docs/worklog.md
 /docs/backlog.md
 /docs/handoff-step3.md
+/docs/superpowers/
