@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/FabianSalge/sift/config"
+	"github.com/FabianSalge/sift/report"
 )
 
 func main() {
@@ -13,5 +14,5 @@ func main() {
 		fmt.Fprintln(os.Stderr, "load fleet:", err)
 		os.Exit(1)
 	}
-	fmt.Print(format(run(fleet, benchWorkloads())))
+	fmt.Print(format(report.Run(fleet, benchWorkloads())))
 }
