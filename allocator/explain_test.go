@@ -48,6 +48,7 @@ func TestExplainBindMatchesPlace(t *testing.T) {
 	workloads := []Workload{
 		{Name: "train-llm", Kind: KindTrain, MinMemoryGB: 80, RequiredPrecisions: []Precision{PrecisionBF16}, CostWeight: 0.5},
 		{Name: "gang", Kind: KindTrain, MinMemoryGB: 80, RequiredPrecisions: []Precision{PrecisionBF16}, DeviceCount: 2, SameIsland: true, CostWeight: 1},
+		{Name: "impossible", Kind: KindTrain, MinMemoryGB: 9999, RequiredPrecisions: []Precision{PrecisionBF16}, CostWeight: 1},
 	}
 	for _, w := range workloads {
 		want, err := NewSiftScheduler(fleet).Place(w)

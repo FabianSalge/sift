@@ -37,10 +37,17 @@ type DeviceVerdict struct {
 	Allocated bool
 	Reasons   []Reason // empty iff Feasible
 	Score     ScoreKey // meaningful only if Feasible
-	Rank      int      // 1-based among bindable devices in score order; 0 otherwise
+	// Rank is 1-based per-device desirability among bindable devices (lessScore
+	// order); 0 if infeasible or already allocated. It ranks individual devices,
+	// NOT island groups — for a same-island gang the bind comes from selectIsland,
+	// so the Rank-1 device may not appear in Bound.
+	Rank int
 }
 
-// Trace is a full filter -> score -> bind explanation for one workload.
+// Trace is a full filter -> score -> bind explanation for one workload. It
+// explains the bound result (Bound, IslandID) and each device's verdict; it does
+// NOT score island-vs-island selection for same-island gangs (a backlog item,
+// to be designed with the Phase-2/3 explainer UI).
 type Trace struct {
 	Workload string
 	Verdicts []DeviceVerdict // one per device, fleet order
