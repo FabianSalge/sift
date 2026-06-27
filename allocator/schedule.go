@@ -175,14 +175,5 @@ func lessScore(a, b Device, w Workload) bool {
 
 // supportsAll reports whether every required precision is in have.
 func supportsAll(have, required []Precision) bool {
-	set := make(map[Precision]struct{}, len(have))
-	for _, p := range have {
-		set[p] = struct{}{}
-	}
-	for _, p := range required {
-		if _, ok := set[p]; !ok {
-			return false
-		}
-	}
-	return true
+	return len(missingPrecisions(have, required)) == 0
 }
