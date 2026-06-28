@@ -1,0 +1,21 @@
+# One-command local run:  docker compose -f web/docker-compose.yml up --build
+# Then open http://localhost:8080
+services:
+  sift-demo:
+    build:
+      context: ..
+      dockerfile: web/Dockerfile
+    image: sift-demo:latest
+    ports:
+      - "8080:8080"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "/server", "-healthcheck"]
+      interval: 30s
+      timeout: 3s
+      retries: 3

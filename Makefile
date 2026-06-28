@@ -26,6 +26,16 @@ demo-assets: wasm scenarios
 smoke:
 	./web/smoke.sh
 
+# Build the distroless container image (from the repo root context).
+.PHONY: demo-image
+demo-image:
+	docker build -f web/Dockerfile -t sift-demo:latest .
+
+# One-command local run of the container at http://localhost:8080
+.PHONY: demo-run
+demo-run:
+	docker compose -f web/docker-compose.yml up --build
+
 .PHONY: test
 test:
 	go test ./...

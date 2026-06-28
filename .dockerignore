@@ -1,0 +1,19 @@
+# Build context is the repo root; keep it lean and reproducible.
+.git
+.gitignore
+.claude
+.superpowers
+docs
+driver
+README.md
+
+# Regenerated inside the build (do not ship host copies)
+**/node_modules
+**/dist
+web/app/public/wasm
+web/app/public/scenarios
+*.wasm
+
+# Cruft
+.DS_Store
+*.log
