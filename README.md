@@ -13,7 +13,7 @@ learn from and run, not a production driver.
 
 > **Status:** active development. The single-cluster core — allocator, fleet
 > loader, benchmark, and a real DRA driver that publishes the fleet and lets the
-> kube-scheduler select against it — is in place. A browser demo is next.
+> kube-scheduler select against it — is in place. A browser demo is in progress.
 
 ## How it works
 
@@ -71,6 +71,50 @@ islands. Sift matches each job to a device that fits, picks the cheapest that
 does, and keeps the gang whole — for less total cost. It is an illustration of
 the three failure modes, not a benchmark evaluation.
 
+## Reading a decision
+
+The table shows *what* each scheduler did; `-explain` shows *why*. Sift's choice
+is never a black box — `allocator.Explain` replays the same filter → score → bind
+over the fleet and reports every device's verdict, reproducible from the CLI:
+
+```text
+$ go run ./cmd/bench -explain train-llm
+train-llm  ·  train · needs ≥80GB, bf16 · 1 device · cost-weight 0.5
+realistic-2026 · 18 devices · filter → score → bind
+score = $/hr × cost-weight, then memory waste, then ID (lower wins)
+
+  rank  device          verdict
+  ----  ------          -------
+  —     inferentia2-0   reject: not trainable, 32GB<80GB, no bf16
+  —     inferentia2-1   reject: not trainable, 32GB<80GB, no bf16
+  —     inferentia2-2   reject: not trainable, 32GB<80GB, no bf16
+  —     inferentia2-3   reject: not trainable, 32GB<80GB, no bf16
+  13    b200-0          ok    cost 3.00   waste 112GB
+  14    b200-1          ok    cost 3.00   waste 112GB
+  5     h100-0          ok    cost 1.25   waste 0GB
+  6     h100-1          ok    cost 1.25   waste 0GB
+  7     h100-2          ok    cost 1.25   waste 0GB
+  8     h100-3          ok    cost 1.25   waste 0GB
+  9     h100-4          ok    cost 1.25   waste 0GB
+  10    h100-5          ok    cost 1.25   waste 0GB
+  11    h100-6          ok    cost 1.25   waste 0GB
+  12    h100-7          ok    cost 1.25   waste 0GB
+  1     mi300x-0        ok    cost 0.95   waste 112GB   BIND
+  2     mi300x-1        ok    cost 0.95   waste 112GB
+  3     mi300x-2        ok    cost 0.95   waste 112GB
+  4     mi300x-3        ok    cost 0.95   waste 112GB
+
+  bound   mi300x-0   $1.90/hr   (lowest score of 14 feasible; 4 rejected)
+```
+
+`train-llm` needs a trainable device with at least 80GB and bf16. The filter
+rejects all four Inferentia2s outright — they can't train, are too small, and
+lack bf16 — even though they are the cheapest devices and listed first, exactly
+the trap first-fit falls into. Among the survivors, the score prefers the
+cheapest *fitting* device weighted by the job's cost sensitivity: the MI300X
+wins at $1.90/hr over an equally capable H100 at $2.50 and a B200 at over three
+times the price. Same mechanism runs behind every row of the table above.
+
 ## Layout
 
 | Path | Purpose |
@@ -88,7 +132,8 @@ the three failure modes, not a benchmark evaluation.
 ```sh
 go build ./...
 go test ./...
-go run ./cmd/bench
+go run ./cmd/bench                    # the Sift-vs-legacy contrast
+go run ./cmd/bench -explain train-llm # trace one decision, filter → score → bind
 ```
 
 ## Docs

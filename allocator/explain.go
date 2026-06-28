@@ -46,8 +46,7 @@ type DeviceVerdict struct {
 
 // Trace is a full filter -> score -> bind explanation for one workload. It
 // explains the bound result (Bound, IslandID) and each device's verdict; it does
-// NOT score island-vs-island selection for same-island gangs (a backlog item,
-// to be designed with the Phase-2/3 explainer UI).
+// not yet score island-vs-island selection for same-island gangs.
 type Trace struct {
 	Workload string
 	Verdicts []DeviceVerdict // one per device, fleet order

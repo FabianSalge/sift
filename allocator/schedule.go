@@ -10,7 +10,7 @@ import (
 var ErrNoFeasibleDevice = errors.New("no feasible device available")
 
 // Placement is the result of binding a workload. DeviceIDs is a slice so
-// multi-device workloads (increment 2) reuse the same shape.
+// multi-device (gang) workloads reuse the same shape.
 type Placement struct {
 	Workload  string
 	DeviceIDs []string

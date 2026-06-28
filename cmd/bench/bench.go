@@ -20,6 +20,24 @@ func benchWorkloads() []allocator.Workload {
 	}
 }
 
+// workloadByName finds a workload in the demo mix by name, for the -explain flag.
+func workloadByName(ws []allocator.Workload, name string) (allocator.Workload, bool) {
+	for _, w := range ws {
+		if w.Name == name {
+			return w, true
+		}
+	}
+	return allocator.Workload{}, false
+}
+
+func workloadNames(ws []allocator.Workload) string {
+	names := make([]string, len(ws))
+	for i, w := range ws {
+		names[i] = w.Name
+	}
+	return strings.Join(names, ", ")
+}
+
 func format(rep report.Report) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Sift vs Legacy — realistic-2026 (%d devices, %d workloads)\n\n", rep.Fleet, rep.Workloads)
