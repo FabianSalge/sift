@@ -44,6 +44,33 @@ with a test asserting Sift catches it where first-fit does not:
 3. **Topology** — a same-island multi-device job must not fragment across islands
    (in-cluster, this is DRA's `matchAttribute: island`).
 
+`go run ./cmd/bench` puts all three on one fleet — Sift on the left, legacy
+first-fit on the right:
+
+```text
+Sift vs Legacy — realistic-2026 (18 devices, 5 workloads)
+
+  workload      Sift                              Legacy
+  --------      ----                              ------
+  train-llm     mi300x-0 ($1.90) ok               inferentia2-0 ($0.75) WRONG-TYPE
+  train-big     mi300x-1 ($1.90) ok               inferentia2-1 ($0.75) WRONG-TYPE
+  infer-fp8     mi300x-2 ($1.90) ok               inferentia2-2 ($0.75) WRONG-TYPE
+  infer-int8    inferentia2-0 ($0.75) ok          inferentia2-3 ($0.75) ok
+  gang-train    h100-0 ×4 ($10.00) ok             b200-0 ×4 ($17.00) FRAGMENTED
+
+  totals        Sift          Legacy
+  total $/hr    $16.45        $20.00
+  type-correct  5/5           2/5
+  fragmented    0             1
+  pending       0             0
+```
+
+Legacy takes the first free device every time: it spends int8-only inference
+ASICs on training jobs they can't run, and splits a same-island gang across two
+islands. Sift matches each job to a device that fits, picks the cheapest that
+does, and keeps the gang whole — for less total cost. It is an illustration of
+the three failure modes, not a benchmark evaluation.
+
 ## Layout
 
 | Path | Purpose |
