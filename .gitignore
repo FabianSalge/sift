@@ -9,6 +9,7 @@
 
 # WebAssembly output
 *.wasm
+web/app/public/wasm/
 
 # Test & coverage artifacts
 *.test
