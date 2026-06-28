@@ -55,3 +55,6 @@ export const PRESETS: Preset[] = [
     workloads: [w({ name: 'gang-train', kind: 'train', minMemoryGB: 80, requiredPrecisions: ['bf16'], deviceCount: 4, sameIsland: true, costWeight: 0.7 })],
   },
 ]
+
+// Explain mode walks one workload at a time; reuse the headline mix's five.
+export const EXPLAIN_WORKLOADS: Workload[] = PRESETS[0].workloads

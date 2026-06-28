@@ -31,7 +31,7 @@
   style="--cat: {CATEGORY_COLOR[device.category]}; {ringColor ? `--ring: ${ringColor}` : ''}"
   class:ringed={!!ringColor}
   onclick={() => onselect?.(device)}
-  title={deco?.tag ? `${device.id} → ${deco.tag}` : device.id}
+  title={deco?.reason ?? (deco?.tag ? `${device.id} → ${deco.tag}` : device.id)}
 >
   {#if deco?.mark}
     <span class="mark mono" style="--ring: {ringColor ?? 'var(--gpu)'}">{deco.mark}</span>

@@ -1,33 +1,49 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { loadScenario, run } from './lib/engine'
-  import type { Device, Report } from './lib/types'
-  import { PRESETS } from './lib/workloads'
+  import { loadScenario, run, explain } from './lib/engine'
+  import type { Device, Report, Trace } from './lib/types'
+  import { PRESETS, EXPLAIN_WORKLOADS } from './lib/workloads'
   import { contrastDecos } from './lib/contrast'
+  import { explainDecos, type Stage } from './lib/explain'
   import Fleet from './components/Fleet.svelte'
   import DetailRail from './components/DetailRail.svelte'
   import ModeSwitch, { type Mode } from './components/ModeSwitch.svelte'
   import ContrastPanel from './components/ContrastPanel.svelte'
+  import ExplainPanel from './components/ExplainPanel.svelte'
 
   let devices = $state<Device[]>([])
   let error = $state<string | null>(null)
   let loading = $state(true)
 
-  let mode = $state<Mode>('contrast')
-  let presetId = $state(PRESETS[0].id)
-  let active = $state<'sift' | 'legacy'>('sift')
+  // Initial view is deep-linkable: ?mode=explain&wl=train-llm&stage=score
+  const params = new URLSearchParams(location.search)
+  const pick = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
+    const v = params.get(key) as T | null
+    return v && allowed.includes(v) ? v : fallback
+  }
+
+  let mode = $state<Mode>(pick('mode', ['contrast', 'explain', 'sandbox'] as const, 'contrast'))
+  let presetId = $state(pick('preset', PRESETS.map((p) => p.id), PRESETS[0].id))
+  let active = $state<'sift' | 'legacy'>(pick('show', ['sift', 'legacy'] as const, 'sift'))
   let report = $state<Report | null>(null)
   let selectedID = $state<string | null>(null)
 
+  let explainName = $state(pick('wl', EXPLAIN_WORKLOADS.map((w) => w.name), EXPLAIN_WORKLOADS[0].name))
+  let stage = $state<Stage>(pick('stage', ['filter', 'score', 'bind'] as const, 'filter'))
+  let trace = $state<Trace | null>(null)
+
   const base = import.meta.env.BASE_URL
   const preset = $derived(PRESETS.find((p) => p.id === presetId) ?? PRESETS[0])
+  const explainWorkload = $derived(
+    EXPLAIN_WORKLOADS.find((w) => w.name === explainName) ?? EXPLAIN_WORKLOADS[0],
+  )
   const selected = $derived(devices.find((d) => d.id === selectedID) ?? null)
 
-  const decorations = $derived(
-    mode === 'contrast' && report
-      ? contrastDecos(active === 'sift' ? report.sift : report.legacy)
-      : undefined,
-  )
+  const decorations = $derived.by(() => {
+    if (mode === 'contrast' && report) return contrastDecos(active === 'sift' ? report.sift : report.legacy)
+    if (mode === 'explain' && trace) return explainDecos(trace, stage)
+    return undefined
+  })
 
   onMount(async () => {
     try {
@@ -40,12 +56,21 @@
     }
   })
 
-  // Re-run the contrast whenever the fleet or the chosen workload mix changes.
+  // Re-run the contrast when the fleet or workload mix changes.
   $effect(() => {
     const wl = preset.workloads
     if (!devices.length) return
     run(devices, wl)
       .then((r) => (report = r))
+      .catch((e) => (error = String(e)))
+  })
+
+  // Re-trace when the explained workload changes.
+  $effect(() => {
+    const w = explainWorkload
+    if (!devices.length) return
+    explain(devices, w, null)
+      .then((t) => (trace = t))
       .catch((e) => (error = String(e)))
   })
 </script>
@@ -76,9 +101,15 @@
     <div class="controls">
       <ModeSwitch {mode} onchange={(m) => (mode = m)} />
       {#if mode === 'contrast'}
-        <div class="presets">
+        <div class="chips">
           {#each PRESETS as p (p.id)}
             <button class="chip" class:on={p.id === presetId} onclick={() => (presetId = p.id)}>{p.label}</button>
+          {/each}
+        </div>
+      {:else if mode === 'explain'}
+        <div class="chips">
+          {#each EXPLAIN_WORKLOADS as w (w.name)}
+            <button class="chip" class:on={w.name === explainName} onclick={() => (explainName = w.name)}>{w.name}</button>
           {/each}
         </div>
       {/if}
@@ -89,6 +120,8 @@
 
       {#if mode === 'contrast' && report}
         <ContrastPanel {report} {active} caption={preset.caption} ontoggle={(s) => (active = s)} />
+      {:else if mode === 'explain' && trace}
+        <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
       {:else}
         <div class="side">
           <div class="soon"><span class="label">{mode}</span><p>This mode is coming in the next increment.</p></div>
@@ -155,7 +188,7 @@
     flex-wrap: wrap;
     margin: 24px 0 18px;
   }
-  .presets {
+  .chips {
     display: flex;
     gap: 6px;
     flex-wrap: wrap;

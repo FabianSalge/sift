@@ -110,4 +110,5 @@ export interface Deco {
   tag?: string // bottom strip text, e.g. the bound workload name
   mark?: string // small corner badge, e.g. a rank "#1" or "✓"
   dim?: boolean // faded — filtered out (Explain mode)
+  reason?: string // hover tooltip, e.g. why a device was rejected
 }
