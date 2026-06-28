@@ -40,7 +40,7 @@ func workloadNames(ws []allocator.Workload) string {
 
 func format(rep report.Report) string {
 	var b strings.Builder
-	fmt.Fprintf(&b, "Sift vs Legacy — realistic-2026 (%d devices, %d workloads)\n\n", rep.Fleet, rep.Workloads)
+	fmt.Fprintf(&b, "Sift vs Legacy · realistic-2026 (%d devices, %d workloads)\n\n", rep.Fleet, rep.Workloads)
 	fmt.Fprintf(&b, "  %-12s  %-32s  %s\n", "workload", "Sift", "Legacy")
 	fmt.Fprintf(&b, "  %-12s  %-32s  %s\n", "--------", "----", "------")
 	for i := range rep.Sift.Outcomes {

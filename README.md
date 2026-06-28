@@ -1,54 +1,64 @@
 # Sift
 
-A capability- and topology-aware accelerator scheduler for Kubernetes Dynamic
-Resource Allocation (DRA). Given a heterogeneous pool of accelerators, Sift
-places each workload on the right *kind* of device, in the right *place*, at the
-right *cost* — something the legacy integer device-plugin model
-(`nvidia.com/gpu: N`) cannot express.
+Sift schedules GPU and accelerator workloads onto a mixed hardware fleet on
+Kubernetes. It matches each workload to a device that can actually run it, in the
+right place on the interconnect, at a reasonable cost. Standard Kubernetes treats
+devices as interchangeable integers (`nvidia.com/gpu: 4`) and can express none of
+that.
 
-Sift is an educational, hardware-free implementation and visualization of a real,
-shipping idea — the mechanism behind production drivers like NVIDIA's
-ComputeDomains, generalized to a multi-vendor, beyond-GPU fleet. It is a model to
-learn from and run, not a production driver.
+It's built on Dynamic Resource Allocation, the API that replaced device plugins
+in Kubernetes 1.34. Production DRA drivers such as NVIDIA's ComputeDomains already
+do this for one vendor; Sift is a smaller, runnable version of the same idea
+across several vendors and device types. It needs no real hardware, so you can
+read it, run it, and see why it makes each decision. It's a learning project, not
+a production driver.
 
-> **Status:** active development. The single-cluster core — allocator, fleet
-> loader, benchmark, and a real DRA driver that publishes the fleet and lets the
-> kube-scheduler select against it — is in place. A browser demo is in progress.
+> **Status:** active development. The single-cluster core is in place: the
+> allocator, a fleet loader, the benchmark, and a real DRA driver that publishes
+> the fleet for the kube-scheduler to select against. A browser demo is in
+> progress.
 
 ## How it works
 
-Every scheduling decision lives in one pure, dependency-free package, `allocator`,
-shaped as **filter → score → bind**: hard constraints (device type, memory,
-precision, topology) filter the pool to the feasible devices; soft preferences
-(cost, locality) score the survivors; the best is bound. A legacy first-fit
-scheduler — no scoring, ignores capabilities — is implemented alongside it. The
-contrast between the two is the point.
+All the scheduling logic lives in one package, `allocator`, with no Kubernetes or
+YAML dependencies. It runs in three steps: filter, score, bind. Hard constraints
+(device type, memory, precision, topology) filter the fleet down to the devices
+that can run the workload. Soft preferences (cost, locality) score whatever
+survives. The best-scoring device gets bound.
 
-That one core is the design. It is imported, never forked, by:
+A legacy scheduler sits alongside it and does what the old device-plugin model
+did: take the first free device, with no capability check and no scoring. Running
+the two on the same fleet is how Sift shows what capability-aware placement buys
+you.
 
-- the **benchmark** (`cmd/bench`) — a text contrast of Sift vs. legacy over a fleet;
-- the **DRA driver** (`driver/`, a fork of dra-example-driver) — publishes the
-  fleet as `ResourceSlice`s and lets the kube-scheduler select devices via CEL
-  derived from the same allocator, pinned by a parity test so the two can't drift;
-- *(planned)* a **WASM demo** — the allocator compiled to the browser.
+That one package is the whole design. Three things import it, and none of them
+fork it:
+
+- the benchmark (`cmd/bench`): a text comparison of Sift against the legacy
+  scheduler over a fleet.
+- the DRA driver (`driver/`, a fork of dra-example-driver): it publishes the fleet
+  as `ResourceSlice`s and lets the kube-scheduler select devices using CEL
+  generated from the same allocator. A parity test keeps the CEL and the allocator
+  from drifting apart.
+- a WASM demo (planned): the allocator compiled to run in the browser.
 
 ## What it shows
 
-Three placement failures the integer device-plugin model can't prevent — each
-with a test asserting Sift catches it where first-fit does not:
+Three placement mistakes the integer device-plugin model can't prevent. Each one
+has a test asserting that Sift avoids it and the legacy scheduler does not:
 
-1. **Type-rejection** — a training job must not land on a non-trainable,
+1. **Type-rejection.** A training job must not land on a non-trainable,
    inference-only ASIC.
-2. **Cost** — a cost-sensitive job takes the cheapest *fitting* device, not the
-   first free expensive one.
-3. **Topology** — a same-island multi-device job must not fragment across islands
-   (in-cluster, this is DRA's `matchAttribute: island`).
+2. **Cost.** A cost-sensitive job should take the cheapest device that fits, not
+   the first free expensive one.
+3. **Topology.** A multi-device job that needs a single interconnect island must
+   not get split across two. In-cluster, this is DRA's `matchAttribute: island`.
 
-`go run ./cmd/bench` puts all three on one fleet — Sift on the left, legacy
-first-fit on the right:
+`go run ./cmd/bench` runs all three on one fleet, Sift on the left and the legacy
+scheduler on the right:
 
 ```text
-Sift vs Legacy — realistic-2026 (18 devices, 5 workloads)
+Sift vs Legacy · realistic-2026 (18 devices, 5 workloads)
 
   workload      Sift                              Legacy
   --------      ----                              ------
@@ -65,17 +75,17 @@ Sift vs Legacy — realistic-2026 (18 devices, 5 workloads)
   pending       0             0
 ```
 
-Legacy takes the first free device every time: it spends int8-only inference
-ASICs on training jobs they can't run, and splits a same-island gang across two
-islands. Sift matches each job to a device that fits, picks the cheapest that
-does, and keeps the gang whole — for less total cost. It is an illustration of
-the three failure modes, not a benchmark evaluation.
+The legacy scheduler grabs the first free device every time. It hands int8-only
+inference ASICs to training jobs that can't run on them, and splits a single-island
+gang across two islands. Sift gives each job a device that fits, picks the cheapest
+one that does, and keeps the gang on one island, for a lower total bill. This is a
+demonstration of the three failure modes, not a performance benchmark.
 
 ## Reading a decision
 
-The table shows *what* each scheduler did; `-explain` shows *why*. Sift's choice
-is never a black box — `allocator.Explain` replays the same filter → score → bind
-over the fleet and reports every device's verdict, reproducible from the CLI:
+The table shows what each scheduler did. The `-explain` flag shows why.
+`allocator.Explain` replays the same filter, score, and bind over the fleet and
+reports a verdict for every device. You can reproduce it from the command line:
 
 ```text
 $ go run ./cmd/bench -explain train-llm
@@ -108,12 +118,13 @@ score = $/hr × cost-weight, then memory waste, then ID (lower wins)
 ```
 
 `train-llm` needs a trainable device with at least 80GB and bf16. The filter
-rejects all four Inferentia2s outright — they can't train, are too small, and
-lack bf16 — even though they are the cheapest devices and listed first, exactly
-the trap first-fit falls into. Among the survivors, the score prefers the
-cheapest *fitting* device weighted by the job's cost sensitivity: the MI300X
-wins at $1.90/hr over an equally capable H100 at $2.50 and a B200 at over three
-times the price. Same mechanism runs behind every row of the table above.
+rejects all four Inferentia2s: they can't train, they're too small, and they lack
+bf16. They're also the cheapest devices on the fleet and listed first, which is
+exactly what the legacy scheduler falls for. Among the devices that pass, the
+score prefers the cheapest one that fits, weighted by how cost-sensitive the job
+is. The MI300X wins at $1.90/hr, ahead of an equally capable H100 at $2.50 and a
+B200 at more than three times the price. Every row in the table above is decided
+the same way.
 
 ## Layout
 
@@ -121,22 +132,22 @@ times the price. Same mechanism runs behind every row of the table above.
 |------|---------|
 | `allocator/` | Pure Go decision logic and data model |
 | `config/` | Loads scenario YAML into `[]allocator.Device` |
-| `dra/` | Maps the model into DRA's vocabulary — attributes and CEL selectors |
+| `dra/` | Maps the model to DRA attributes and CEL selectors |
 | `scenarios/` | Fleet definitions |
 | `cmd/bench/` | Sift-vs-legacy benchmark |
 | `driver/` | DRA driver fork that publishes the fleet (git submodule) |
-| `docs/concepts/` | Concept notes written along the way |
+| `docs/concepts/` | Notes on the concepts behind the project |
 
 ## Build & test
 
 ```sh
 go build ./...
 go test ./...
-go run ./cmd/bench                    # the Sift-vs-legacy contrast
-go run ./cmd/bench -explain train-llm # trace one decision, filter → score → bind
+go run ./cmd/bench                    # Sift vs the legacy scheduler
+go run ./cmd/bench -explain train-llm # explain one placement, step by step
 ```
 
 ## Docs
 
-- [`docs/concepts`](docs/concepts) — notes on DRA, heterogeneous accelerators,
+- [`docs/concepts`](docs/concepts): notes on DRA, heterogeneous accelerators,
   topology islands, and capability-aware scheduling.
