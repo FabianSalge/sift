@@ -1,0 +1,103 @@
+// Mirrors the camelCase DTOs the WASM engine emits (web/wasm/engine/dto.go).
+
+export type Vendor = 'nvidia' | 'amd' | 'google' | 'aws'
+export type Category = 'gpu' | 'train-asic' | 'infer-asic'
+export type Precision = 'bf16' | 'fp16' | 'fp8' | 'fp4' | 'int8'
+export type Interconnect = 'nvlink' | 'infinity-fabric' | 'ici' | 'neuronlink' | 'none'
+export type Kind = 'train' | 'infer'
+
+export const NO_ISLAND = -1
+
+export interface Device {
+  id: string
+  node: number
+  island: number
+  vendor: Vendor
+  category: Category
+  memoryGB: number
+  precisions: Precision[]
+  interconnect: Interconnect
+  costPerHr: number
+  trainable: boolean
+}
+
+export interface Workload {
+  name: string
+  kind: Kind
+  minMemoryGB: number
+  requiredPrecisions: Precision[]
+  deviceCount: number
+  sameIsland: boolean
+  gang: boolean
+  latencySensitive: boolean
+  costWeight: number
+}
+
+export interface Outcome {
+  workload: string
+  deviceIDs: string[] | null
+  costPerHr: number
+  feasible: boolean
+  sameIslandOK: boolean
+  pending: boolean
+}
+
+export interface Summary {
+  name: string
+  totalCost: number
+  typeCorrect: number
+  gangsWhole: number
+  fragmented: number
+  pending: number
+  outcomes: Outcome[]
+}
+
+export interface Report {
+  fleet: number
+  workloads: number
+  sift: Summary
+  legacy: Summary
+}
+
+export interface Reason {
+  code: string
+  detail: string
+}
+
+export interface Score {
+  costComponent: number
+  memoryWaste: number
+}
+
+export interface Verdict {
+  deviceID: string
+  feasible: boolean
+  allocated: boolean
+  reasons: Reason[]
+  score: Score
+  rank: number
+}
+
+export interface Trace {
+  workload: string
+  verdicts: Verdict[]
+  bound: string[] | null
+  island: number
+  err: string
+}
+
+// ── display helpers ──────────────────────────────────────────────────────
+export const CATEGORY_COLOR: Record<Category, string> = {
+  gpu: 'var(--gpu)',
+  'train-asic': 'var(--train)',
+  'infer-asic': 'var(--infer)',
+}
+
+export const CATEGORY_LABEL: Record<Category, string> = {
+  gpu: 'GPU',
+  'train-asic': 'train-ASIC',
+  'infer-asic': 'infer-ASIC',
+}
+
+/** Model name from a device id: "h100-0" -> "H100", "mi300x-3" -> "MI300X". */
+export const modelName = (id: string): string => id.replace(/-\d+$/, '').toUpperCase()

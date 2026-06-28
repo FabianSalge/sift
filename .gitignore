@@ -11,6 +11,9 @@
 *.wasm
 web/app/public/wasm/
 
+# Generated demo static assets (copied from scenarios/ by `make scenarios`)
+web/app/public/scenarios/
+
 # Test & coverage artifacts
 *.test
 *.out
