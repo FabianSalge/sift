@@ -3,6 +3,8 @@ package engine
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/FabianSalge/sift/allocator"
@@ -64,9 +66,18 @@ func TestLoadScenarioMatchesConfig(t *testing.T) {
 		t.Fatalf("len = %d, want %d", len(got), len(want))
 	}
 	for i := range want {
-		if got[i].ID != want[i].ID || got[i].Category != string(want[i].Category) ||
-			got[i].MemoryGB != want[i].MemoryGB || got[i].Island != want[i].IslandID {
-			t.Errorf("device %d = %+v, want id/category/mem/island from %+v", i, got[i], want[i])
+		w := want[i]
+		precs := make([]string, len(w.Precisions))
+		for j, p := range w.Precisions {
+			precs[j] = string(p)
+		}
+		wantDTO := DeviceDTO{
+			ID: w.ID, Node: w.Node, Island: w.IslandID, Vendor: string(w.Vendor),
+			Category: string(w.Category), MemoryGB: w.MemoryGB, Precisions: precs,
+			Interconnect: string(w.Interconnect), CostPerHr: w.CostPerHr, Trainable: w.Trainable,
+		}
+		if !reflect.DeepEqual(got[i], wantDTO) {
+			t.Errorf("device %d = %+v, want %+v", i, got[i], wantDTO)
 		}
 	}
 }
@@ -168,6 +179,55 @@ func TestExplainMatchesAllocator(t *testing.T) {
 			t.Errorf("verdict %s: got feasible=%v rank=%d, want feasible=%v rank=%d",
 				got.Verdicts[i].DeviceID, got.Verdicts[i].Feasible, got.Verdicts[i].Rank,
 				want.Verdicts[i].Feasible, want.Verdicts[i].Rank)
+		}
+	}
+}
+
+// TestWireFormatKeys pins the camelCase JSON contract the browser frontend reads
+// (spec §6). The parity tests round-trip through the same DTO, so a renamed tag
+// would pass them silently; these assert the literal wire keys.
+func TestWireFormatKeys(t *testing.T) {
+	fleetJSON, err := LoadScenario([]byte(fixtureYAML))
+	if err != nil {
+		t.Fatal(err)
+	}
+	wls := fixtureWorkloads()
+	dtos := make([]WorkloadDTO, len(wls))
+	for i, w := range wls {
+		dtos[i] = workloadToDTO(w)
+	}
+	wlJSON, err := json.Marshal(dtos)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runJSON, err := Run(fleetJSON, wlJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wJSON, err := json.Marshal(workloadToDTO(wls[2]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	explainJSON, err := Explain(fleetJSON, wJSON, []byte("null"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		blob []byte
+		keys []string
+	}{
+		{"LoadScenario", fleetJSON, []string{`"memoryGB"`, `"costPerHr"`, `"id"`, `"island"`, `"precisions"`, `"trainable"`}},
+		{"Run", runJSON, []string{`"totalCost"`, `"typeCorrect"`, `"deviceIDs"`, `"sameIslandOK"`, `"gangsWhole"`, `"fragmented"`}},
+		{"Explain", explainJSON, []string{`"deviceID"`, `"costComponent"`, `"memoryWaste"`, `"rank"`, `"bound"`, `"island"`}},
+	}
+	for _, c := range cases {
+		s := string(c.blob)
+		for _, k := range c.keys {
+			if !strings.Contains(s, k) {
+				t.Errorf("%s JSON missing wire key %s:\n%s", c.name, k, s)
+			}
 		}
 	}
 }
