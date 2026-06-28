@@ -21,6 +21,11 @@ scenarios:
 .PHONY: demo-assets
 demo-assets: wasm scenarios
 
+# Headless smoke test of the rendered demo (builds + serves + asserts the DOM).
+.PHONY: smoke
+smoke:
+	./web/smoke.sh
+
 .PHONY: test
 test:
 	go test ./...
