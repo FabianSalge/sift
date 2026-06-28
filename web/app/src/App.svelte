@@ -1,15 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import { loadScenario, run, explain } from './lib/engine'
-  import type { Device, Report, Trace } from './lib/types'
+  import type { Device, Workload, Report, Trace } from './lib/types'
   import { PRESETS, EXPLAIN_WORKLOADS } from './lib/workloads'
   import { contrastDecos } from './lib/contrast'
   import { explainDecos, type Stage } from './lib/explain'
   import Fleet from './components/Fleet.svelte'
-  import DetailRail from './components/DetailRail.svelte'
   import ModeSwitch, { type Mode } from './components/ModeSwitch.svelte'
   import ContrastPanel from './components/ContrastPanel.svelte'
   import ExplainPanel from './components/ExplainPanel.svelte'
+  import SandboxPanel from './components/SandboxPanel.svelte'
 
   let devices = $state<Device[]>([])
   let error = $state<string | null>(null)
@@ -32,16 +32,29 @@
   let stage = $state<Stage>(pick('stage', ['filter', 'score', 'bind'] as const, 'filter'))
   let trace = $state<Trace | null>(null)
 
+  let sandboxWorkload = $state<Workload>({
+    name: 'custom',
+    kind: 'train',
+    minMemoryGB: 80,
+    requiredPrecisions: ['bf16'],
+    deviceCount: 1,
+    sameIsland: false,
+    gang: false,
+    latencySensitive: false,
+    costWeight: 0.5,
+  })
+  let sandboxTrace = $state<Trace | null>(null)
+
   const base = import.meta.env.BASE_URL
   const preset = $derived(PRESETS.find((p) => p.id === presetId) ?? PRESETS[0])
   const explainWorkload = $derived(
     EXPLAIN_WORKLOADS.find((w) => w.name === explainName) ?? EXPLAIN_WORKLOADS[0],
   )
-  const selected = $derived(devices.find((d) => d.id === selectedID) ?? null)
 
   const decorations = $derived.by(() => {
     if (mode === 'contrast' && report) return contrastDecos(active === 'sift' ? report.sift : report.legacy)
     if (mode === 'explain' && trace) return explainDecos(trace, stage)
+    if (mode === 'sandbox' && sandboxTrace) return explainDecos(sandboxTrace, 'bind')
     return undefined
   })
 
@@ -71,6 +84,15 @@
     if (!devices.length) return
     explain(devices, w, null)
       .then((t) => (trace = t))
+      .catch((e) => (error = String(e)))
+  })
+
+  // Live-trace the sandbox workload on any field edit (stringify reads all fields).
+  $effect(() => {
+    const payload = JSON.stringify(sandboxWorkload)
+    if (!devices.length) return
+    explain(devices, JSON.parse(payload) as Workload, null)
+      .then((t) => (sandboxTrace = t))
       .catch((e) => (error = String(e)))
   })
 </script>
@@ -118,15 +140,16 @@
     <main class="canvas">
       <Fleet {devices} {selectedID} {decorations} onselect={(d) => (selectedID = d.id)} />
 
-      {#if mode === 'contrast' && report}
-        <ContrastPanel {report} {active} caption={preset.caption} ontoggle={(s) => (active = s)} />
-      {:else if mode === 'explain' && trace}
-        <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
-      {:else}
-        <div class="side">
-          <div class="soon"><span class="label">{mode}</span><p>This mode is coming in the next increment.</p></div>
-          <DetailRail device={selected} />
-        </div>
+      {#if mode === 'contrast'}
+        {#if report}
+          <ContrastPanel {report} {active} caption={preset.caption} ontoggle={(s) => (active = s)} />
+        {/if}
+      {:else if mode === 'explain'}
+        {#if trace}
+          <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
+        {/if}
+      {:else if mode === 'sandbox'}
+        <SandboxPanel bind:workload={sandboxWorkload} trace={sandboxTrace} />
       {/if}
     </main>
   {/if}
@@ -225,24 +248,6 @@
   }
   .canvas :global(.fleet) {
     flex: 1;
-  }
-
-  .side {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-  }
-  .soon {
-    width: 184px;
-    border: 1px dashed var(--line-strong);
-    border-radius: var(--r-lg);
-    padding: 16px;
-    color: var(--ink-faint);
-  }
-  .soon p {
-    margin: 8px 0 0;
-    font-size: 12px;
-    line-height: 1.5;
   }
 
   .status {
