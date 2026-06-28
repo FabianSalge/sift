@@ -86,7 +86,10 @@ func TestRunMatchesReport(t *testing.T) {
 	for i, w := range wls {
 		dtos[i] = workloadToDTO(w)
 	}
-	wlJSON, _ := json.Marshal(dtos)
+	wlJSON, err := json.Marshal(dtos)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	gotJSON, err := Run(fleetJSON, wlJSON)
 	if err != nil {
@@ -104,11 +107,23 @@ func TestRunMatchesReport(t *testing.T) {
 			got.Sift.TotalCost, got.Sift.TypeCorrect, got.Legacy.Fragmented, got.Legacy.TypeCorrect,
 			want.Sift.TotalCost, want.Sift.TypeCorrect, want.Legacy.Fragmented, want.Legacy.TypeCorrect)
 	}
-	for i := range want.Sift.Outcomes {
-		if len(got.Sift.Outcomes[i].DeviceIDs) != len(want.Sift.Outcomes[i].DeviceIDs) {
-			t.Errorf("sift outcome %d device count mismatch", i)
+	assertOutcomes := func(name string, got []OutcomeDTO, want []report.Outcome) {
+		if len(got) != len(want) {
+			t.Fatalf("%s: %d outcomes, want %d", name, len(got), len(want))
+		}
+		for i := range want {
+			if len(got[i].DeviceIDs) != len(want[i].DeviceIDs) {
+				t.Fatalf("%s outcome %d: %d devices, want %d", name, i, len(got[i].DeviceIDs), len(want[i].DeviceIDs))
+			}
+			for j := range want[i].DeviceIDs {
+				if got[i].DeviceIDs[j] != want[i].DeviceIDs[j] {
+					t.Errorf("%s outcome %d device %d = %s, want %s", name, i, j, got[i].DeviceIDs[j], want[i].DeviceIDs[j])
+				}
+			}
 		}
 	}
+	assertOutcomes("sift", got.Sift.Outcomes, want.Sift.Outcomes)
+	assertOutcomes("legacy", got.Legacy.Outcomes, want.Legacy.Outcomes)
 }
 
 // Explain must equal allocator.Explain for the same inputs.
@@ -118,8 +133,14 @@ func TestExplainMatchesAllocator(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := fixtureWorkloads()[2] // gang-train
-	fleetJSON, _ := EncodeFleet(fleet)
-	wJSON, _ := json.Marshal(workloadToDTO(w))
+	fleetJSON, err := EncodeFleet(fleet)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wJSON, err := json.Marshal(workloadToDTO(w))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	gotJSON, err := Explain(fleetJSON, wJSON, []byte("null"))
 	if err != nil {
