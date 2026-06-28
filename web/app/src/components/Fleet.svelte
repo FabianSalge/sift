@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { Device } from '../lib/types'
+  import type { Device, Deco } from '../lib/types'
   import { CATEGORY_COLOR } from '../lib/types'
   import { groupFleet, isStandalone, type Pod } from '../lib/fleet'
   import DeviceTile from './DeviceTile.svelte'
@@ -7,10 +7,12 @@
   let {
     devices,
     selectedID = null,
+    decorations,
     onselect,
   }: {
     devices: Device[]
     selectedID?: string | null
+    decorations?: Map<string, Deco>
     onselect?: (d: Device) => void
   } = $props()
 
@@ -39,7 +41,12 @@
             </div>
             <div class="row">
               {#each pod.devices as d (d.id)}
-                <DeviceTile device={d} selected={d.id === selectedID} {onselect} />
+                <DeviceTile
+                  device={d}
+                  selected={d.id === selectedID}
+                  deco={decorations?.get(d.id)}
+                  {onselect}
+                />
               {/each}
             </div>
           </div>

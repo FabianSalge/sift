@@ -101,3 +101,13 @@ export const CATEGORY_LABEL: Record<Category, string> = {
 
 /** Model name from a device id: "h100-0" -> "H100", "mi300x-3" -> "MI300X". */
 export const modelName = (id: string): string => id.replace(/-\d+$/, '').toUpperCase()
+
+// ── per-device decoration applied over the fleet (placement / explanation) ──
+export type Ring = 'bound' | 'wrong' | 'frag' | 'select'
+
+export interface Deco {
+  ring?: Ring // colored outline: bound=green, wrong=red, frag=amber, select=white
+  tag?: string // bottom strip text, e.g. the bound workload name
+  mark?: string // small corner badge, e.g. a rank "#1" or "✓"
+  dim?: boolean // faded — filtered out (Explain mode)
+}
