@@ -28,6 +28,7 @@
 <button
   class="tile"
   class:dim={deco?.dim}
+  class:pulse={deco?.pulse}
   style="--cat: {CATEGORY_COLOR[device.category]}; {ringColor ? `--ring: ${ringColor}` : ''}"
   class:ringed={!!ringColor}
   onclick={() => onselect?.(device)}
@@ -78,6 +79,20 @@
   }
   .tile.dim {
     opacity: 0.34;
+  }
+  .tile.pulse {
+    animation: tile-pulse 0.7s ease-out;
+    z-index: 1;
+  }
+  @keyframes tile-pulse {
+    0% {
+      box-shadow: 0 0 0 1px var(--ring), 0 0 0 0 color-mix(in oklab, var(--ring) 70%, transparent);
+      transform: translateY(-2px) scale(1.04);
+    }
+    100% {
+      box-shadow: 0 0 0 1px var(--ring), 0 0 0 10px transparent;
+      transform: translateY(0) scale(1);
+    }
   }
 
   .band {

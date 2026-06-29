@@ -6,11 +6,13 @@
     report,
     active,
     caption,
+    step = Number.POSITIVE_INFINITY,
     ontoggle,
   }: {
     report: Report
     active: 'sift' | 'legacy'
     caption: string
+    step?: number
     ontoggle: (s: 'sift' | 'legacy') => void
   } = $props()
 
@@ -56,12 +58,16 @@
   </div>
 
   <ul class="outcomes">
-    {#each summary.outcomes as o (o.workload)}
+    {#each summary.outcomes as o, i (o.workload)}
       {@const m = mark(o)}
-      <li>
+      <li class:queued={i >= step} class:current={i === step - 1}>
         <span class="wl mono">{o.workload}</span>
-        <span class="dev mono">{devLabel(o)}</span>
-        <span class="mk {m.tone}">{m.text}</span>
+        {#if i < step}
+          <span class="dev mono">{devLabel(o)}</span>
+          <span class="mk {m.tone}">{m.text}</span>
+        {:else}
+          <span class="dev mono q">queued</span>
+        {/if}
       </li>
     {/each}
   </ul>
@@ -205,5 +211,22 @@
   .mk.frag {
     color: var(--accent);
     background: color-mix(in oklab, var(--accent) 14%, transparent);
+  }
+
+  .outcomes li.queued .wl {
+    color: var(--ink-faint);
+  }
+  .q {
+    grid-column: 2 / 4;
+    text-align: right;
+    font-size: 9px;
+    color: var(--ink-faint);
+    opacity: 0.7;
+  }
+  .outcomes li.current {
+    margin: 0 -6px;
+    padding: 5px 6px;
+    border-radius: 5px;
+    background: color-mix(in oklab, var(--gpu) 12%, transparent);
   }
 </style>

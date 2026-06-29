@@ -111,4 +111,5 @@ export interface Deco {
   mark?: string // small corner badge, e.g. a rank "#1" or "✓"
   dim?: boolean // faded — filtered out (Explain mode)
   reason?: string // hover tooltip, e.g. why a device was rejected
+  pulse?: boolean // briefly emphasize — the device just placed in the timeline
 }

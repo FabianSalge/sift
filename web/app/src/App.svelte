@@ -10,6 +10,7 @@
   import ContrastPanel from './components/ContrastPanel.svelte'
   import ExplainPanel from './components/ExplainPanel.svelte'
   import SandboxPanel from './components/SandboxPanel.svelte'
+  import Timeline from './components/Timeline.svelte'
 
   let devices = $state<Device[]>([])
   let error = $state<string | null>(null)
@@ -27,6 +28,12 @@
   let active = $state<'sift' | 'legacy'>(pick('show', ['sift', 'legacy'] as const, 'sift'))
   let report = $state<Report | null>(null)
   let selectedID = $state<string | null>(null)
+
+  // Placement timeline: step = how many workloads of the queue have been placed.
+  const initialStep = params.get('step')
+  let step = $state(initialStep != null ? Math.max(0, Number(initialStep) || 0) : 0)
+  let playing = $state(false)
+  let firstContrast = true // honor a deep-linked ?step= on first load instead of autoplaying
 
   let explainName = $state(pick('wl', EXPLAIN_WORKLOADS.map((w) => w.name), EXPLAIN_WORKLOADS[0].name))
   let stage = $state<Stage>(pick('stage', ['filter', 'score', 'bind'] as const, 'filter'))
@@ -51,12 +58,29 @@
     EXPLAIN_WORKLOADS.find((w) => w.name === explainName) ?? EXPLAIN_WORKLOADS[0],
   )
 
+  const total = $derived(report ? report.workloads : 0)
+  const activeSummary = $derived(report ? (active === 'sift' ? report.sift : report.legacy) : null)
+  const currentLabel = $derived(
+    activeSummary && step > 0 && step <= activeSummary.outcomes.length
+      ? activeSummary.outcomes[step - 1].workload
+      : '',
+  )
+
   const decorations = $derived.by(() => {
-    if (mode === 'contrast' && report) return contrastDecos(active === 'sift' ? report.sift : report.legacy)
+    if (mode === 'contrast' && report) return contrastDecos(active === 'sift' ? report.sift : report.legacy, step)
     if (mode === 'explain' && trace) return explainDecos(trace, stage)
     if (mode === 'sandbox' && sandboxTrace) return explainDecos(sandboxTrace, 'bind')
     return undefined
   })
+
+  function togglePlay() {
+    if (step >= total) step = 0 // replay from the start
+    playing = !playing
+  }
+  function setStep(s: number) {
+    playing = false
+    step = s
+  }
 
   onMount(async () => {
     try {
@@ -94,6 +118,35 @@
     explain(devices, JSON.parse(payload) as Workload, null)
       .then((t) => (sandboxTrace = t))
       .catch((e) => (error = String(e)))
+  })
+
+  // Reset + auto-play the placement timeline when entering Contrast or changing
+  // the workload mix / scheduler; pause it when Contrast isn't showing.
+  $effect(() => {
+    void report
+    void active
+    const m = mode
+    if (m !== 'contrast' || !report) {
+      playing = false
+      return
+    }
+    if (firstContrast && initialStep != null) {
+      firstContrast = false // keep the deep-linked step, don't autoplay over it
+      return
+    }
+    firstContrast = false
+    step = 0
+    playing = true
+  })
+
+  // Advance the timeline one workload at a time while playing.
+  $effect(() => {
+    if (!playing) return
+    const id = setInterval(() => {
+      if (step < total) step += 1
+      else playing = false
+    }, 600)
+    return () => clearInterval(id)
   })
 </script>
 
@@ -137,12 +190,18 @@
       {/if}
     </div>
 
+    {#if mode === 'contrast' && report}
+      <div class="timeline-row">
+        <Timeline {step} {total} {playing} label={currentLabel} ontoggle={togglePlay} onstep={setStep} />
+      </div>
+    {/if}
+
     <main class="canvas">
       <Fleet {devices} {selectedID} {decorations} onselect={(d) => (selectedID = d.id)} />
 
       {#if mode === 'contrast'}
         {#if report}
-          <ContrastPanel {report} {active} caption={preset.caption} ontoggle={(s) => (active = s)} />
+          <ContrastPanel {report} {active} {step} caption={preset.caption} ontoggle={(s) => (active = s)} />
         {/if}
       {:else if mode === 'explain'}
         {#if trace}
@@ -239,6 +298,11 @@
     color: var(--ink);
     border-color: color-mix(in oklab, var(--gpu) 55%, transparent);
     background: color-mix(in oklab, var(--gpu) 14%, transparent);
+  }
+
+  .timeline-row {
+    margin: 0 0 18px;
+    max-width: 760px;
   }
 
   .canvas {
