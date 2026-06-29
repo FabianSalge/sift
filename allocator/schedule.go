@@ -31,28 +31,14 @@ func NewSiftScheduler(devices []Device) *SiftScheduler {
 // Place binds n = max(1, DeviceCount) free, feasible devices to w, or
 // ErrNoFeasibleDevice if it cannot satisfy the whole request (no partial bind).
 func (s *SiftScheduler) Place(w Workload) (Placement, error) {
-	n := w.DeviceCount
-	if n < 1 {
-		n = 1
-	}
-	var candidates []Device
-	for _, d := range s.devices {
-		if !s.allocated[d.ID] && Feasible(d, w) {
-			candidates = append(candidates, d)
-		}
-	}
-	chosen, ok := selectN(candidates, w, n)
+	ids, ok := AllocateSift(s.devices, w, s.allocated)
 	if !ok {
 		return Placement{}, ErrNoFeasibleDevice
 	}
-	ids := make([]string, len(chosen))
-	var cost float64
-	for i, d := range chosen {
-		s.allocated[d.ID] = true
-		ids[i] = d.ID
-		cost += d.CostPerHr
+	for _, id := range ids {
+		s.allocated[id] = true
 	}
-	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: cost}, nil
+	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: sumCost(s.devices, ids)}, nil
 }
 
 // selectN picks the n devices to bind. A same-island gang (n>1) must come from a

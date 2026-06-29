@@ -15,28 +15,12 @@ func NewLegacyScheduler(devices []Device) *LegacyScheduler {
 // Place binds the first n = max(1, DeviceCount) free devices in fleet order,
 // regardless of whether they fit or share an island.
 func (s *LegacyScheduler) Place(w Workload) (Placement, error) {
-	n := w.DeviceCount
-	if n < 1 {
-		n = 1
-	}
-	var chosen []Device
-	for _, d := range s.devices {
-		if !s.allocated[d.ID] {
-			chosen = append(chosen, d)
-			if len(chosen) == n {
-				break
-			}
-		}
-	}
-	if len(chosen) < n {
+	ids, ok := AllocateLegacy(s.devices, w, s.allocated)
+	if !ok {
 		return Placement{}, ErrNoFeasibleDevice
 	}
-	ids := make([]string, n)
-	var cost float64
-	for i, d := range chosen {
-		s.allocated[d.ID] = true
-		ids[i] = d.ID
-		cost += d.CostPerHr
+	for _, id := range ids {
+		s.allocated[id] = true
 	}
-	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: cost}, nil
+	return Placement{Workload: w.Name, DeviceIDs: ids, CostPerHr: sumCost(s.devices, ids)}, nil
 }
