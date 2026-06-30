@@ -11,6 +11,7 @@
   import ExplainPanel from './components/ExplainPanel.svelte'
   import SandboxPanel from './components/SandboxPanel.svelte'
   import Timeline from './components/Timeline.svelte'
+  import StreamView from './components/StreamView.svelte'
 
   let devices = $state<Device[]>([])
   let error = $state<string | null>(null)
@@ -23,7 +24,9 @@
     return v && allowed.includes(v) ? v : fallback
   }
 
-  let mode = $state<Mode>(pick('mode', ['contrast', 'explain', 'sandbox'] as const, 'contrast'))
+  let mode = $state<Mode>(pick('mode', ['contrast', 'explain', 'sandbox', 'stream'] as const, 'contrast'))
+  const streamT = Number(params.get('t') ?? 0) || 0
+  const streamSpeed = Number(params.get('speed') ?? 4) || 4
   let presetId = $state(pick('preset', PRESETS.map((p) => p.id), PRESETS[0].id))
   let active = $state<'sift' | 'legacy'>(pick('show', ['sift', 'legacy'] as const, 'sift'))
   let report = $state<Report | null>(null)
@@ -190,27 +193,31 @@
       {/if}
     </div>
 
-    {#if mode === 'contrast' && report}
-      <div class="timeline-row">
-        <Timeline {step} {total} {playing} label={currentLabel} ontoggle={togglePlay} onstep={setStep} />
-      </div>
-    {/if}
-
-    <main class="canvas">
-      <Fleet {devices} {selectedID} {decorations} onselect={(d) => (selectedID = d.id)} />
-
-      {#if mode === 'contrast'}
-        {#if report}
-          <ContrastPanel {report} {active} {step} caption={preset.caption} ontoggle={(s) => (active = s)} />
-        {/if}
-      {:else if mode === 'explain'}
-        {#if trace}
-          <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
-        {/if}
-      {:else if mode === 'sandbox'}
-        <SandboxPanel bind:workload={sandboxWorkload} trace={sandboxTrace} />
+    {#if mode === 'stream'}
+      <StreamView {devices} initialT={streamT} initialSpeed={streamSpeed} />
+    {:else}
+      {#if mode === 'contrast' && report}
+        <div class="timeline-row">
+          <Timeline {step} {total} {playing} label={currentLabel} ontoggle={togglePlay} onstep={setStep} />
+        </div>
       {/if}
-    </main>
+
+      <main class="canvas">
+        <Fleet {devices} {selectedID} {decorations} onselect={(d) => (selectedID = d.id)} />
+
+        {#if mode === 'contrast'}
+          {#if report}
+            <ContrastPanel {report} {active} {step} caption={preset.caption} ontoggle={(s) => (active = s)} />
+          {/if}
+        {:else if mode === 'explain'}
+          {#if trace}
+            <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
+          {/if}
+        {:else if mode === 'sandbox'}
+          <SandboxPanel bind:workload={sandboxWorkload} trace={sandboxTrace} />
+        {/if}
+      </main>
+    {/if}
   {/if}
 </div>
 

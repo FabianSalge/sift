@@ -1,5 +1,5 @@
 <script lang="ts">
-  export type Mode = 'contrast' | 'explain' | 'sandbox'
+  export type Mode = 'contrast' | 'explain' | 'sandbox' | 'stream'
 
   let { mode, onchange }: { mode: Mode; onchange: (m: Mode) => void } = $props()
 
@@ -7,6 +7,7 @@
     { id: 'contrast', label: 'Contrast' },
     { id: 'explain', label: 'Explain' },
     { id: 'sandbox', label: 'Sandbox' },
+    { id: 'stream', label: 'Stream' },
   ]
 </script>
 

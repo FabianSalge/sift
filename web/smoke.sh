@@ -48,6 +48,8 @@ check "http://localhost:$PORT/?mode=explain&wl=train-llm&stage=score" \
   "by score rank" "mi300x-0" "rejected" "trainable"
 check "http://localhost:$PORT/?mode=sandbox" \
   "author a workload" "feasible"
+check "http://localhost:$PORT/?mode=stream&t=18" \
+  "useful" "wasted" "incoming" "running"
 
 if [ "$fail" -ne 0 ]; then echo "smoke: FAILED"; exit 1; fi
 echo "smoke: PASSED"

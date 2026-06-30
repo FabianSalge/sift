@@ -113,3 +113,36 @@ export interface Deco {
   reason?: string // hover tooltip, e.g. why a device was rejected
   pulse?: boolean // briefly emphasize — the device just placed in the timeline
 }
+
+// ── stream simulation (mirrors web/wasm/engine ResultDTO) ───────────────────
+export interface Arrival {
+  at: number
+  workload: Workload
+  duration: number
+}
+
+export interface ArrivalResult {
+  index: number
+  workload: string
+  arrivedAt: number
+  placedAt: number // -1 if never placed within the horizon
+  end: number // -1 if never placed
+  deviceIDs: string[] | null
+  feasible: boolean
+  sameIslandOK: boolean
+  useful: boolean
+  costPerHr: number
+}
+
+export interface SchedulerSim {
+  name: string
+  arrivals: ArrivalResult[]
+}
+
+export interface SimResult {
+  fleet: number
+  stream: number
+  horizon: number
+  sift: SchedulerSim
+  legacy: SchedulerSim
+}

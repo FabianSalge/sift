@@ -2,7 +2,7 @@
 // calls. All scheduling logic lives in the wasm (the pure allocator core); this
 // module only loads it and marshals strings. See web/wasm + ADR-0003.
 
-import type { Device, Workload, Report, Trace } from './types'
+import type { Device, Workload, Report, Trace, Arrival, SimResult } from './types'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -19,6 +19,7 @@ declare global {
   function siftLoadScenario(yaml: string): Envelope
   function siftRun(fleetJSON: string, workloadsJSON: string): Envelope
   function siftExplain(fleetJSON: string, workloadJSON: string, allocatedJSON: string): Envelope
+  function siftSimulate(fleetJSON: string, streamJSON: string): Envelope
 }
 
 let ready: Promise<void> | null = null
@@ -84,4 +85,9 @@ export async function explain(
     siftExplain(JSON.stringify(fleet), JSON.stringify(workload), JSON.stringify(allocated)),
     'explain',
   ) as Trace
+}
+
+export async function simulate(fleet: Device[], stream: Arrival[]): Promise<SimResult> {
+  await initEngine()
+  return call(siftSimulate(JSON.stringify(fleet), JSON.stringify(stream)), 'simulate') as SimResult
 }
