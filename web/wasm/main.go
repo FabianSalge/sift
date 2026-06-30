@@ -33,5 +33,8 @@ func main() {
 	js.Global().Set("siftExplain", jsonFunc(3, func(a []js.Value) ([]byte, error) {
 		return engine.Explain([]byte(a[0].String()), []byte(a[1].String()), []byte(a[2].String()))
 	}))
+	js.Global().Set("siftSimulate", jsonFunc(2, func(a []js.Value) ([]byte, error) {
+		return engine.Simulate([]byte(a[0].String()), []byte(a[1].String()))
+	}))
 	select {} // keep the Go runtime alive so the exported funcs stay callable
 }

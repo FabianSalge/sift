@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/FabianSalge/sift/allocator"
 	"github.com/FabianSalge/sift/report"
+	"github.com/FabianSalge/sift/sim"
 )
 
 // DeviceDTO is the camelCase JSON shape of an allocator.Device. Island = -1 for
@@ -163,4 +164,53 @@ func traceToDTO(t allocator.Trace) TraceDTO {
 		}
 	}
 	return TraceDTO{Workload: t.Workload, Verdicts: verdicts, Bound: t.Bound, Island: t.IslandID, Err: t.Err}
+}
+
+// ---- stream simulation DTOs ----
+
+type ArrivalDTO struct {
+	At       float64     `json:"at"`
+	Workload WorkloadDTO `json:"workload"`
+	Duration float64     `json:"duration"`
+}
+
+type ArrivalResultDTO struct {
+	Index        int      `json:"index"`
+	Workload     string   `json:"workload"`
+	ArrivedAt    float64  `json:"arrivedAt"`
+	PlacedAt     float64  `json:"placedAt"`
+	End          float64  `json:"end"`
+	DeviceIDs    []string `json:"deviceIDs"`
+	Feasible     bool     `json:"feasible"`
+	SameIslandOK bool     `json:"sameIslandOK"`
+	Useful       bool     `json:"useful"`
+	CostPerHr    float64  `json:"costPerHr"`
+}
+
+type SchedulerResultDTO struct {
+	Name     string             `json:"name"`
+	Arrivals []ArrivalResultDTO `json:"arrivals"`
+}
+
+type ResultDTO struct {
+	Fleet   int                `json:"fleet"`
+	Stream  int                `json:"stream"`
+	Horizon float64            `json:"horizon"`
+	Sift    SchedulerResultDTO `json:"sift"`
+	Legacy  SchedulerResultDTO `json:"legacy"`
+}
+
+func resultToDTO(r sim.Result) ResultDTO {
+	return ResultDTO{Fleet: r.Fleet, Stream: r.Stream, Horizon: r.Horizon, Sift: schedResultToDTO(r.Sift), Legacy: schedResultToDTO(r.Legacy)}
+}
+
+func schedResultToDTO(s sim.SchedulerResult) SchedulerResultDTO {
+	arr := make([]ArrivalResultDTO, len(s.Arrivals))
+	for i, a := range s.Arrivals {
+		arr[i] = ArrivalResultDTO{
+			Index: a.Index, Workload: a.Workload, ArrivedAt: a.ArrivedAt, PlacedAt: a.PlacedAt, End: a.End,
+			DeviceIDs: a.DeviceIDs, Feasible: a.Feasible, SameIslandOK: a.SameIslandOK, Useful: a.Useful, CostPerHr: a.CostPerHr,
+		}
+	}
+	return SchedulerResultDTO{Name: s.Name, Arrivals: arr}
 }

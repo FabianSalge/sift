@@ -10,6 +10,7 @@ import (
 	"github.com/FabianSalge/sift/allocator"
 	"github.com/FabianSalge/sift/config"
 	"github.com/FabianSalge/sift/report"
+	"github.com/FabianSalge/sift/sim"
 )
 
 // EncodeFleet renders a fleet as camelCase DeviceDTO JSON.
@@ -77,4 +78,21 @@ func Explain(fleetJSON, workloadJSON, allocatedJSON []byte) ([]byte, error) {
 		}
 	}
 	return json.Marshal(traceToDTO(allocator.Explain(fleet, dto.toWorkload(), allocated)))
+}
+
+// Simulate forward-runs an arrival stream against both schedulers.
+func Simulate(fleetJSON, streamJSON []byte) ([]byte, error) {
+	fleet, err := decodeFleet(fleetJSON)
+	if err != nil {
+		return nil, err
+	}
+	var dtos []ArrivalDTO
+	if err := json.Unmarshal(streamJSON, &dtos); err != nil {
+		return nil, err
+	}
+	stream := make(sim.Stream, len(dtos))
+	for i, a := range dtos {
+		stream[i] = sim.Arrival{At: a.At, Workload: a.Workload.toWorkload(), Duration: a.Duration}
+	}
+	return json.Marshal(resultToDTO(sim.Run(fleet, stream)))
 }
