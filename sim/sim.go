@@ -8,6 +8,7 @@ package sim
 
 import (
 	"math"
+	"strconv"
 
 	"github.com/FabianSalge/sift/allocator"
 )
@@ -151,17 +152,25 @@ func runOne(name string, fleet []allocator.Device, stream Stream, place allocFn)
 // whole — mirrors the contrast outcome accounting.
 func evaluate(byID map[string]allocator.Device, w allocator.Workload, ids []string) (feasible, sameIsland bool) {
 	feasible = true
-	islands := map[int]bool{}
 	for _, id := range ids {
-		d := byID[id]
-		if !allocator.Feasible(d, w) {
+		if !allocator.Feasible(byID[id], w) {
 			feasible = false
 		}
-		islands[d.IslandID] = true
 	}
 	sameIsland = true
 	if w.SameIsland && w.DeviceCount > 1 {
-		sameIsland = len(islands) == 1
+		// Group by island; a standalone device (NoIsland) shares no interconnect,
+		// so it is its own group (keyed by id) — standalones never collapse into one.
+		groups := map[string]bool{}
+		for _, id := range ids {
+			d := byID[id]
+			if d.IslandID == allocator.NoIsland {
+				groups["s:"+d.ID] = true
+			} else {
+				groups["i:"+strconv.Itoa(d.IslandID)] = true
+			}
+		}
+		sameIsland = len(groups) == 1
 	}
 	return feasible, sameIsland
 }

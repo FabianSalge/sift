@@ -81,3 +81,27 @@ func TestHorizon(t *testing.T) {
 		t.Errorf("Horizon = %v, want 7", h)
 	}
 }
+
+// A same-island gang spread across standalone devices (no shared interconnect)
+// is not same-island and therefore not useful — even though every device is
+// individually feasible. Standalone devices must not collapse into one "island".
+func TestGangOnStandaloneNotSameIsland(t *testing.T) {
+	standalone := func(id string) allocator.Device {
+		return allocator.Device{ID: id, IslandID: allocator.NoIsland, Category: allocator.CategoryGPU, Trainable: true, MemoryGB: 80, CostPerHr: 2, Precisions: []allocator.Precision{allocator.PrecisionBF16}}
+	}
+	fleet := []allocator.Device{standalone("g0"), standalone("g1")}
+	gang := allocator.Workload{Name: "gang", Kind: allocator.KindTrain, MinMemoryGB: 80, RequiredPrecisions: []allocator.Precision{allocator.PrecisionBF16}, DeviceCount: 2, SameIsland: true, CostWeight: 1}
+	stream := Stream{{At: 0, Workload: gang, Duration: 5}}
+
+	// Legacy grabs the first two free devices — both standalone.
+	l := find(Run(fleet, stream).Legacy, "gang")
+	if l.PlacedAt < 0 {
+		t.Fatal("legacy should place the gang on the two free standalone devices")
+	}
+	if l.SameIslandOK {
+		t.Error("two standalone devices share no interconnect — SameIslandOK must be false")
+	}
+	if l.Useful {
+		t.Error("a fragmented gang (standalone devices) must not count as useful")
+	}
+}
