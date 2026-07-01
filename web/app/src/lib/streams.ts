@@ -20,7 +20,8 @@ const gang = (name: string): Workload => w({ name, kind: 'train', minMemoryGB: 8
 // so legacy's first-fit dumps them onto the (non-trainable) Inferentia2s at the
 // head of the fleet — wasted capacity — and fragments the gangs across islands,
 // while Sift places them on capable GPUs and keeps the gangs whole. Bursty enough
-// that legacy's wasted holds back the queue up. (Tour-trap discipline, ADR-0014.)
+// that legacy's wasted holds keep real work queued behind them. (Tour-trap
+// discipline, ADR-0014.)
 export const STREAM: Arrival[] = [
   { at: 0, workload: train('train-1'), duration: 14 },
   { at: 1, workload: train('train-2'), duration: 14 },

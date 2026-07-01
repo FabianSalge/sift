@@ -11,7 +11,7 @@ export interface ClusterState {
   wastedCount: number // busy devices doing no useful work (legacy's bad holds)
   queue: number // arrivals admitted but not yet running/done at t
   usefulDone: number // useful jobs completed by t
-  cost: number // cumulative device-cost accrued by t
+  cost: number // cumulative device-cost by t — costPerHr × sim-time units (relative, not real $)
 }
 
 // Derive a scheduler's cluster state at simulation time t from its per-arrival

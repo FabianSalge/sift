@@ -107,6 +107,11 @@
       {#if upcoming.length === 0}<span class="job done mono">stream complete</span>{/if}
     </div>
   </div>
+
+  <p class="note">
+    Illustrative stream — Sift decides every placement; the sim models that a job on an
+    unfit device does no useful work. Not a production queueing system.
+  </p>
 </div>
 
 <style>
@@ -275,5 +280,13 @@
   .job.done {
     color: var(--ink-faint);
     border-style: dashed;
+  }
+
+  .note {
+    margin: 4px 0 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: var(--ink-faint);
+    max-width: 72ch;
   }
 </style>
