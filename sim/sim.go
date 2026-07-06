@@ -49,7 +49,9 @@ type Result struct {
 	Legacy  SchedulerResult
 }
 
-type allocFn func(devices []allocator.Device, w allocator.Workload, allocated map[string]bool) ([]string, bool)
+// PlaceFunc is one stateless placement decision (allocator.AllocateSift or
+// AllocateLegacy) — the only door through which sim places anything.
+type PlaceFunc func(devices []allocator.Device, w allocator.Workload, allocated map[string]bool) ([]string, bool)
 
 // Run simulates the stream against both schedulers.
 func Run(fleet []allocator.Device, stream Stream) Result {
@@ -70,7 +72,7 @@ type running struct {
 	ids []string
 }
 
-func runOne(name string, fleet []allocator.Device, stream Stream, place allocFn) SchedulerResult {
+func runOne(name string, fleet []allocator.Device, stream Stream, place PlaceFunc) SchedulerResult {
 	byID := indexByID(fleet)
 	res := make([]ArrivalResult, len(stream))
 	for i, a := range stream {
