@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { loadScenario, clusterInit, clusterSubmit, clusterAdvance, clusterAddNode, clusterDrainNode } from './lib/engine'
-  import type { ClusterSnapshot, Deco } from './lib/types'
+  import { loadScenario, clusterInit, clusterSubmit, clusterAdvance, clusterAddNode, clusterDrainNode, clusterExplain } from './lib/engine'
+  import type { ClusterSnapshot, Deco, ClusterJob, Trace, Device } from './lib/types'
   import { DEFAULT_TEMPLATES, type WorkloadTemplate } from './lib/templates'
   import { mulberry32, jitter } from './lib/rng'
   import { Generator } from './lib/traffic'
@@ -12,6 +12,7 @@
   import Transport from './components/Transport.svelte'
   import WorkloadDock from './components/WorkloadDock.svelte'
   import MachineDock from './components/MachineDock.svelte'
+  import JobPanel from './components/JobPanel.svelte'
 
   const params = new URLSearchParams(location.search)
   const seed = Math.abs(Number(params.get('seed') ?? 0)) || 4212
@@ -22,6 +23,7 @@
   let error = $state<string | null>(null)
   let loading = $state(true)
   let templates = $state<WorkloadTemplate[]>(structuredClone(DEFAULT_TEMPLATES))
+  let selected = $state<{ job: ClusterJob; trace: Trace | null } | null>(null)
 
   const rng = mulberry32(seed)
   const gen = new Generator(rng)
@@ -75,6 +77,19 @@
     await clusterDrainNode(node)
   }
 
+  async function selectJob(j: ClusterJob) {
+    selected = { job: j, trace: null }
+    const trace = await clusterExplain(j.id)
+    if (selected?.job.id === j.id) selected = { job: j, trace }
+  }
+
+  function selectDevice(d: Device) {
+    const cd = snap?.devices.find((x) => x.id === d.id)
+    if (!cd || cd.jobID < 0) return
+    const j = snap?.running.find((x) => x.id === cd.jobID)
+    if (j) selectJob(j)
+  }
+
   // A node is "draining" when every one of its remaining devices is.
   const drainingNodes = $derived.by(() => {
     const all = new Map<number, boolean>()
@@ -106,6 +121,10 @@
         }, 700)
       }
       snap = s
+      if (selected) {
+        const cur = [...s.running, ...s.queue].find((j) => j.id === selected!.job.id)
+        selected = cur ? { job: cur, trace: selected.trace } : null
+      }
     } catch (e) {
       error = String(e)
     } finally {
@@ -175,14 +194,17 @@
 
     <div class="bar">
       <Transport {paused} {speed} clock={snap.clock} {seed} ontoggle={() => (paused = !paused)} onspeed={(v) => (speed = v)} />
-      <QueueRail queue={snap.queue} />
+      <QueueRail queue={snap.queue} onselect={selectJob} />
     </div>
 
     <main class="canvas">
       <div class="left">
-        <Fleet devices={snap.devices} {decorations} ondrain={drainNode} {drainingNodes} />
+        <Fleet devices={snap.devices} {decorations} ondrain={drainNode} {drainingNodes} onselect={selectDevice} />
       </div>
       <aside class="dock">
+        {#if selected}
+          <JobPanel job={selected.job} trace={selected.trace} clock={snap.clock} onclose={() => (selected = null)} />
+        {/if}
         <WorkloadDock bind:templates onburst={burst} />
         <MachineDock deviceCount={snap.devices.length} onadd={addMachine} />
       </aside>
