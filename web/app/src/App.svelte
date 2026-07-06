@@ -1,94 +1,86 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { loadScenario, run, explain } from './lib/engine'
-  import type { Device, Workload, Report, Trace } from './lib/types'
-  import { PRESETS, EXPLAIN_WORKLOADS } from './lib/workloads'
-  import { contrastDecos } from './lib/contrast'
-  import { explainDecos, type Stage } from './lib/explain'
+  import { loadScenario, clusterInit, clusterSubmit, clusterAdvance } from './lib/engine'
+  import type { ClusterSnapshot, Deco } from './lib/types'
+  import { DEFAULT_TEMPLATES, type WorkloadTemplate } from './lib/templates'
+  import { mulberry32, jitter } from './lib/rng'
+  import { Generator } from './lib/traffic'
   import Fleet from './components/Fleet.svelte'
-  import ModeSwitch, { type Mode } from './components/ModeSwitch.svelte'
-  import ContrastPanel from './components/ContrastPanel.svelte'
-  import ExplainPanel from './components/ExplainPanel.svelte'
-  import SandboxPanel from './components/SandboxPanel.svelte'
-  import Timeline from './components/Timeline.svelte'
-  import StreamView from './components/StreamView.svelte'
+  import QueueRail from './components/QueueRail.svelte'
+  import ShadowStrip from './components/ShadowStrip.svelte'
+  import Transport from './components/Transport.svelte'
 
-  let devices = $state<Device[]>([])
+  const params = new URLSearchParams(location.search)
+  const seed = Math.abs(Number(params.get('seed') ?? 0)) || 4212
+  let speed = $state(Math.min(20, Math.max(1, Number(params.get('speed') ?? 0) || 4)))
+  let paused = $state(false)
+
+  let snap = $state<ClusterSnapshot | null>(null)
   let error = $state<string | null>(null)
   let loading = $state(true)
+  let templates = $state<WorkloadTemplate[]>(structuredClone(DEFAULT_TEMPLATES))
 
-  // Initial view is deep-linkable: ?mode=explain&wl=train-llm&stage=score
-  const params = new URLSearchParams(location.search)
-  const pick = <T extends string>(key: string, allowed: readonly T[], fallback: T): T => {
-    const v = params.get(key) as T | null
-    return v && allowed.includes(v) ? v : fallback
-  }
-
-  let mode = $state<Mode>(pick('mode', ['contrast', 'explain', 'sandbox', 'stream'] as const, 'contrast'))
-  const streamT = Number(params.get('t') ?? 0) || 0
-  const streamSpeed = Number(params.get('speed') ?? 4) || 4
-  let presetId = $state(pick('preset', PRESETS.map((p) => p.id), PRESETS[0].id))
-  let active = $state<'sift' | 'legacy'>(pick('show', ['sift', 'legacy'] as const, 'sift'))
-  let report = $state<Report | null>(null)
-  let selectedID = $state<string | null>(null)
-
-  // Placement timeline: step = how many workloads of the queue have been placed.
-  const initialStep = params.get('step')
-  let step = $state(initialStep != null ? Math.max(0, Number(initialStep) || 0) : 0)
-  let playing = $state(false)
-  let firstContrast = true // honor a deep-linked ?step= on first load instead of autoplaying
-
-  let explainName = $state(pick('wl', EXPLAIN_WORKLOADS.map((w) => w.name), EXPLAIN_WORKLOADS[0].name))
-  let stage = $state<Stage>(pick('stage', ['filter', 'score', 'bind'] as const, 'filter'))
-  let trace = $state<Trace | null>(null)
-
-  let sandboxWorkload = $state<Workload>({
-    name: 'custom',
-    kind: 'train',
-    minMemoryGB: 80,
-    requiredPrecisions: ['bf16'],
-    deviceCount: 1,
-    sameIsland: false,
-    gang: false,
-    latencySensitive: false,
-    costWeight: 0.5,
-  })
-  let sandboxTrace = $state<Trace | null>(null)
+  const rng = mulberry32(seed)
+  const gen = new Generator(rng)
+  let simNow = 0
+  let ticking = false
+  const jobCounts = new Map<string, number>()
+  let pulses = $state<Set<string>>(new Set())
 
   const base = import.meta.env.BASE_URL
-  const preset = $derived(PRESETS.find((p) => p.id === presetId) ?? PRESETS[0])
-  const explainWorkload = $derived(
-    EXPLAIN_WORKLOADS.find((w) => w.name === explainName) ?? EXPLAIN_WORKLOADS[0],
-  )
 
-  const total = $derived(report ? report.workloads : 0)
-  const activeSummary = $derived(report ? (active === 'sift' ? report.sift : report.legacy) : null)
-  const currentLabel = $derived(
-    activeSummary && step > 0 && step <= activeSummary.outcomes.length
-      ? activeSummary.outcomes[step - 1].workload
-      : '',
-  )
+  const ratePerHr = $derived(snap ? snap.running.reduce((s, j) => s + j.costPerHr, 0) : 0)
 
+  // Running jobs ring their devices; draining devices dim.
   const decorations = $derived.by(() => {
-    if (mode === 'contrast' && report) return contrastDecos(active === 'sift' ? report.sift : report.legacy, step)
-    if (mode === 'explain' && trace) return explainDecos(trace, stage)
-    if (mode === 'sandbox' && sandboxTrace) return explainDecos(sandboxTrace, 'bind')
-    return undefined
+    if (!snap) return undefined
+    const m = new Map<string, Deco>()
+    for (const j of snap.running) {
+      for (const id of j.deviceIDs ?? []) {
+        m.set(id, { ring: 'bound', tag: j.workload.name, pulse: pulses.has(id) })
+      }
+    }
+    for (const d of snap.devices) {
+      if (d.draining) m.set(d.id, { ...m.get(d.id), dim: true, reason: `${d.id} · draining` })
+    }
+    return m
   })
 
-  function togglePlay() {
-    if (step >= total) step = 0 // replay from the start
-    playing = !playing
+  function submitFrom(t: WorkloadTemplate, duration: number): Promise<number> {
+    const n = (jobCounts.get(t.id) ?? 0) + 1
+    jobCounts.set(t.id, n)
+    return clusterSubmit({ ...t.workload, name: `${t.id}-${n}` }, duration)
   }
-  function setStep(s: number) {
-    playing = false
-    step = s
+
+  async function tick() {
+    if (paused || ticking || loading || error) return
+    ticking = true
+    try {
+      simNow += 0.1 * speed
+      for (const due of gen.due(templates, simNow)) await submitFrom(due.template, due.duration)
+      const s = await clusterAdvance(simNow)
+      const placed = new Set(pulses)
+      for (const e of s.events ?? []) {
+        if (e.kind === 'placed') for (const id of e.deviceIDs ?? []) placed.add(id)
+      }
+      if (placed.size !== pulses.size) {
+        pulses = placed
+        setTimeout(() => (pulses = new Set()), 700)
+      }
+      snap = s
+    } catch (e) {
+      error = String(e)
+    } finally {
+      ticking = false
+    }
   }
 
   onMount(async () => {
     try {
       const yaml = await (await fetch(`${base}scenarios/realistic-2026.yaml`)).text()
-      devices = await loadScenario(yaml)
+      const fleet = await loadScenario(yaml)
+      await clusterInit(fleet)
+      snap = await clusterAdvance(0)
     } catch (e) {
       error = String(e)
     } finally {
@@ -96,59 +88,9 @@
     }
   })
 
-  // Re-run the contrast when the fleet or workload mix changes.
   $effect(() => {
-    const wl = preset.workloads
-    if (!devices.length) return
-    run(devices, wl)
-      .then((r) => (report = r))
-      .catch((e) => (error = String(e)))
-  })
-
-  // Re-trace when the explained workload changes.
-  $effect(() => {
-    const w = explainWorkload
-    if (!devices.length) return
-    explain(devices, w, null)
-      .then((t) => (trace = t))
-      .catch((e) => (error = String(e)))
-  })
-
-  // Live-trace the sandbox workload on any field edit (stringify reads all fields).
-  $effect(() => {
-    const payload = JSON.stringify(sandboxWorkload)
-    if (!devices.length) return
-    explain(devices, JSON.parse(payload) as Workload, null)
-      .then((t) => (sandboxTrace = t))
-      .catch((e) => (error = String(e)))
-  })
-
-  // Reset + auto-play the placement timeline when entering Contrast or changing
-  // the workload mix / scheduler; pause it when Contrast isn't showing.
-  $effect(() => {
-    void report
-    void active
-    const m = mode
-    if (m !== 'contrast' || !report) {
-      playing = false
-      return
-    }
-    if (firstContrast && initialStep != null) {
-      firstContrast = false // keep the deep-linked step, don't autoplay over it
-      return
-    }
-    firstContrast = false
-    step = 0
-    playing = true
-  })
-
-  // Advance the timeline one workload at a time while playing.
-  $effect(() => {
-    if (!playing) return
-    const id = setInterval(() => {
-      if (step < total) step += 1
-      else playing = false
-    }, 600)
+    if (loading || error) return
+    const id = setInterval(tick, 100)
     return () => clearInterval(id)
   })
 </script>
@@ -159,15 +101,20 @@
       <div class="brand">
         <span class="mark" aria-hidden="true"></span>
         <span class="word">sift</span>
+        <span class="live mono">live cluster</span>
       </div>
-      {#if devices.length}
-        <span class="count mono">{devices.length} devices · realistic-2026</span>
+      {#if snap}
+        <div class="stats mono">
+          <span><b>{snap.usefulDone}</b> useful</span>
+          <span class:bad={snap.queue.length > 0}><b>{snap.queue.length}</b> queued</span>
+          <span><b>${ratePerHr.toFixed(2)}</b>/h</span>
+          <span>{snap.devices.length} devices</span>
+        </div>
       {/if}
     </div>
     <p class="tag">
-      capability- &amp; topology-aware accelerator scheduling — <span class="dim"
-        >place each workload on the right device, in the right place, at the right cost</span
-      >
+      capability- &amp; topology-aware accelerator scheduling —
+      <span class="dim">a cluster you operate: invent workloads, grow the fleet, and watch what legacy would waste</span>
     </p>
   </header>
 
@@ -175,74 +122,42 @@
     <div class="status"><span class="label">booting</span><p>loading the scheduler engine…</p></div>
   {:else if error}
     <div class="status err"><span class="label">error</span><p class="mono">{error}</p></div>
-  {:else}
-    <div class="controls">
-      <ModeSwitch {mode} onchange={(m) => (mode = m)} />
-      {#if mode === 'contrast'}
-        <div class="chips">
-          {#each PRESETS as p (p.id)}
-            <button class="chip" class:on={p.id === presetId} onclick={() => (presetId = p.id)}>{p.label}</button>
-          {/each}
-        </div>
-      {:else if mode === 'explain'}
-        <div class="chips">
-          {#each EXPLAIN_WORKLOADS as w (w.name)}
-            <button class="chip" class:on={w.name === explainName} onclick={() => (explainName = w.name)}>{w.name}</button>
-          {/each}
-        </div>
-      {/if}
+  {:else if snap}
+    <ShadowStrip
+      shadow={snap.shadow}
+      sift={{ usefulDone: snap.usefulDone, queue: snap.queue.length, cost: snap.cost }}
+      deviceCount={snap.devices.length}
+    />
+
+    <div class="bar">
+      <Transport {paused} {speed} clock={snap.clock} {seed} ontoggle={() => (paused = !paused)} onspeed={(v) => (speed = v)} />
+      <QueueRail queue={snap.queue} />
     </div>
 
-    {#if mode === 'stream'}
-      <StreamView {devices} initialT={streamT} initialSpeed={streamSpeed} />
-    {:else}
-      {#if mode === 'contrast' && report}
-        <div class="timeline-row">
-          <Timeline {step} {total} {playing} label={currentLabel} ontoggle={togglePlay} onstep={setStep} />
-        </div>
-      {/if}
-
-      <main class="canvas">
-        <Fleet {devices} {selectedID} {decorations} onselect={(d) => (selectedID = d.id)} />
-
-        {#if mode === 'contrast'}
-          {#if report}
-            <ContrastPanel {report} {active} {step} caption={preset.caption} ontoggle={(s) => (active = s)} />
-          {/if}
-        {:else if mode === 'explain'}
-          {#if trace}
-            <ExplainPanel {trace} workload={explainWorkload} {stage} onstage={(s) => (stage = s)} />
-          {/if}
-        {:else if mode === 'sandbox'}
-          <SandboxPanel bind:workload={sandboxWorkload} trace={sandboxTrace} />
-        {/if}
-      </main>
-    {/if}
+    <main class="canvas">
+      <div class="left">
+        <Fleet devices={snap.devices} {decorations} />
+      </div>
+      <aside class="dock"></aside>
+    </main>
   {/if}
 </div>
 
 <style>
   .frame {
-    max-width: 1180px;
+    max-width: 1280px;
     margin: 0 auto;
     padding: 36px 28px 80px;
   }
 
-  .masthead {
-    border-bottom: 1px solid var(--line);
-    padding-bottom: 20px;
-  }
+  .masthead { border-bottom: 1px solid var(--line); padding-bottom: 20px; }
   .masthead .row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
   }
-  .brand {
-    display: flex;
-    align-items: center;
-    gap: 11px;
-  }
+  .brand { display: flex; align-items: center; gap: 11px; }
   .mark {
     width: 13px;
     height: 13px;
@@ -256,69 +171,39 @@
     font-size: 22px;
     letter-spacing: 0.02em;
   }
-  .count {
-    font-size: 11px;
+  .live {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.09em;
     color: var(--ink-faint);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 3px 9px;
   }
-  .tag {
-    margin: 12px 0 0;
-    font-size: 13.5px;
-    color: var(--ink-dim);
-    max-width: 70ch;
-  }
-  .tag .dim {
-    color: var(--ink-faint);
-  }
+  .stats { display: flex; gap: 16px; font-size: 12px; color: var(--ink-dim); }
+  .stats b { font-size: 15px; color: var(--ink); font-weight: 600; }
+  .stats .bad b { color: var(--accent); }
+  .tag { margin: 12px 0 0; font-size: 13.5px; color: var(--ink-dim); max-width: 78ch; }
+  .tag .dim { color: var(--ink-faint); }
 
-  .controls {
+  .bar {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 18px;
     flex-wrap: wrap;
-    margin: 24px 0 18px;
-  }
-  .chips {
-    display: flex;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .chip {
-    appearance: none;
-    border: 1px solid var(--line);
-    background: var(--panel);
-    color: var(--ink-dim);
-    font-family: var(--font-sans);
-    font-size: 12px;
-    padding: 6px 12px;
-    border-radius: 999px;
-    cursor: pointer;
-    transition:
-      color 0.12s,
-      border-color 0.12s,
-      background 0.12s;
-  }
-  .chip:hover {
-    color: var(--ink);
-    border-color: var(--line-strong);
-  }
-  .chip.on {
-    color: var(--ink);
-    border-color: color-mix(in oklab, var(--gpu) 55%, transparent);
-    background: color-mix(in oklab, var(--gpu) 14%, transparent);
+    margin-bottom: 18px;
   }
 
-  .timeline-row {
-    margin: 0 0 18px;
-    max-width: 760px;
-  }
-
-  .canvas {
+  .canvas { display: flex; gap: 16px; align-items: flex-start; }
+  .left { flex: 1; min-width: 0; }
+  .dock {
+    width: 264px;
+    flex: none;
     display: flex;
-    gap: 16px;
-    align-items: flex-start;
-  }
-  .canvas :global(.fleet) {
-    flex: 1;
+    flex-direction: column;
+    gap: 14px;
+    position: sticky;
+    top: 16px;
   }
 
   .status {
@@ -330,14 +215,7 @@
     background: var(--bg-2);
     margin-top: 26px;
   }
-  .status p {
-    margin: 10px 0 0;
-    font-size: 13px;
-  }
-  .status.err {
-    border-color: color-mix(in oklab, var(--reject) 50%, transparent);
-  }
-  .status.err p {
-    color: var(--reject);
-  }
+  .status p { margin: 10px 0 0; font-size: 13px; }
+  .status.err { border-color: color-mix(in oklab, var(--reject) 50%, transparent); }
+  .status.err p { color: var(--reject); }
 </style>

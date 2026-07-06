@@ -2,7 +2,7 @@
 // calls. All scheduling logic lives in the wasm (the pure allocator core); this
 // module only loads it and marshals strings. See web/wasm + ADR-0003.
 
-import type { Device, Workload, Report, Trace, Arrival, SimResult, ClusterSnapshot } from './types'
+import type { Device, Workload, Trace, ClusterSnapshot } from './types'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -17,9 +17,6 @@ declare global {
   // eslint-disable-next-line no-var
   var Go: { new (): { importObject: WebAssembly.Imports; run(i: WebAssembly.Instance): void } }
   function siftLoadScenario(yaml: string): Envelope
-  function siftRun(fleetJSON: string, workloadsJSON: string): Envelope
-  function siftExplain(fleetJSON: string, workloadJSON: string, allocatedJSON: string): Envelope
-  function siftSimulate(fleetJSON: string, streamJSON: string): Envelope
   function siftClusterInit(fleetJSON: string): Envelope
   function siftClusterSubmit(jobJSON: string): Envelope
   function siftClusterAddNode(devicesJSON: string): Envelope
@@ -74,28 +71,6 @@ function call(fn: Envelope, label: string): unknown {
 export async function loadScenario(yaml: string): Promise<Device[]> {
   await initEngine()
   return call(siftLoadScenario(yaml), 'loadScenario') as Device[]
-}
-
-export async function run(fleet: Device[], workloads: Workload[]): Promise<Report> {
-  await initEngine()
-  return call(siftRun(JSON.stringify(fleet), JSON.stringify(workloads)), 'run') as Report
-}
-
-export async function explain(
-  fleet: Device[],
-  workload: Workload,
-  allocated: Record<string, boolean> | null = null,
-): Promise<Trace> {
-  await initEngine()
-  return call(
-    siftExplain(JSON.stringify(fleet), JSON.stringify(workload), JSON.stringify(allocated)),
-    'explain',
-  ) as Trace
-}
-
-export async function simulate(fleet: Device[], stream: Arrival[]): Promise<SimResult> {
-  await initEngine()
-  return call(siftSimulate(JSON.stringify(fleet), JSON.stringify(stream)), 'simulate') as SimResult
 }
 
 export async function clusterInit(fleet: Device[]): Promise<void> {

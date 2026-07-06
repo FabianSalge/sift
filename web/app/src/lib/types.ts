@@ -33,32 +33,6 @@ export interface Workload {
   costWeight: number
 }
 
-export interface Outcome {
-  workload: string
-  deviceIDs: string[] | null
-  costPerHr: number
-  feasible: boolean
-  sameIslandOK: boolean
-  pending: boolean
-}
-
-export interface Summary {
-  name: string
-  totalCost: number
-  typeCorrect: number
-  gangsWhole: number
-  fragmented: number
-  pending: number
-  outcomes: Outcome[]
-}
-
-export interface Report {
-  fleet: number
-  workloads: number
-  sift: Summary
-  legacy: Summary
-}
-
 export interface Reason {
   code: string
   detail: string
@@ -112,39 +86,6 @@ export interface Deco {
   dim?: boolean // faded — filtered out (Explain mode)
   reason?: string // hover tooltip, e.g. why a device was rejected
   pulse?: boolean // briefly emphasize — the device just placed in the timeline
-}
-
-// ── stream simulation (mirrors web/wasm/engine ResultDTO) ───────────────────
-export interface Arrival {
-  at: number
-  workload: Workload
-  duration: number
-}
-
-export interface ArrivalResult {
-  index: number
-  workload: string
-  arrivedAt: number
-  placedAt: number // -1 if never placed within the horizon
-  end: number // -1 if never placed
-  deviceIDs: string[] | null
-  feasible: boolean
-  sameIslandOK: boolean
-  useful: boolean
-  costPerHr: number
-}
-
-export interface SchedulerSim {
-  name: string
-  arrivals: ArrivalResult[]
-}
-
-export interface SimResult {
-  fleet: number
-  stream: number
-  horizon: number
-  sift: SchedulerSim
-  legacy: SchedulerSim
 }
 
 // ── live cluster session (mirrors web/wasm/engine ClusterSnapshotDTO) ───────
