@@ -59,13 +59,21 @@
       simNow += 0.1 * speed
       for (const due of gen.due(templates, simNow)) await submitFrom(due.template, due.duration)
       const s = await clusterAdvance(simNow)
-      const placed = new Set(pulses)
+      const placedIDs: string[] = []
       for (const e of s.events ?? []) {
-        if (e.kind === 'placed') for (const id of e.deviceIDs ?? []) placed.add(id)
+        if (e.kind === 'placed') for (const id of e.deviceIDs ?? []) placedIDs.push(id)
       }
-      if (placed.size !== pulses.size) {
-        pulses = placed
-        setTimeout(() => (pulses = new Set()), 700)
+      if (placedIDs.length) {
+        const next = new Set(pulses)
+        for (const id of placedIDs) next.add(id)
+        pulses = next
+        // Each batch clears only its own ids, so overlapping placements keep
+        // their full 700ms flash.
+        setTimeout(() => {
+          const cleared = new Set(pulses)
+          for (const id of placedIDs) cleared.delete(id)
+          pulses = cleared
+        }, 700)
       }
       snap = s
     } catch (e) {
