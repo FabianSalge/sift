@@ -214,3 +214,68 @@ func schedResultToDTO(s sim.SchedulerResult) SchedulerResultDTO {
 	}
 	return SchedulerResultDTO{Name: s.Name, Arrivals: arr}
 }
+
+// ---- live cluster session DTOs ----
+
+type SubmitDTO struct {
+	Workload WorkloadDTO `json:"workload"`
+	Duration float64     `json:"duration"`
+}
+
+type ClusterDeviceDTO struct {
+	DeviceDTO
+	JobID    int  `json:"jobID"` // -1 when idle
+	Draining bool `json:"draining"`
+}
+
+type ClusterJobDTO struct {
+	ID        int         `json:"id"`
+	Workload  WorkloadDTO `json:"workload"`
+	Duration  float64     `json:"duration"`
+	ArrivedAt float64     `json:"arrivedAt"`
+	PlacedAt  float64     `json:"placedAt"`
+	End       float64     `json:"end"`
+	DeviceIDs []string    `json:"deviceIDs"`
+	Useful    bool        `json:"useful"`
+	CostPerHr float64     `json:"costPerHr"`
+}
+
+type EventDTO struct {
+	Kind      string   `json:"kind"`
+	At        float64  `json:"at"`
+	JobID     int      `json:"jobID"`
+	Node      int      `json:"node"`
+	DeviceIDs []string `json:"deviceIDs"`
+}
+
+// ShadowDTO is the legacy cluster reduced to metrics — it is never rendered.
+type ShadowDTO struct {
+	Busy       int     `json:"busy"`
+	Wasted     int     `json:"wasted"`
+	Queue      int     `json:"queue"`
+	UsefulDone int     `json:"usefulDone"`
+	Cost       float64 `json:"cost"`
+}
+
+type ClusterSnapshotDTO struct {
+	Clock      float64            `json:"clock"`
+	Devices    []ClusterDeviceDTO `json:"devices"`
+	Queue      []ClusterJobDTO    `json:"queue"`
+	Running    []ClusterJobDTO    `json:"running"`
+	UsefulDone int                `json:"usefulDone"`
+	Cost       float64            `json:"cost"`
+	Events     []EventDTO         `json:"events"`
+	Shadow     ShadowDTO          `json:"shadow"`
+}
+
+func jobToDTO(j sim.Job) ClusterJobDTO {
+	return ClusterJobDTO{
+		ID: j.ID, Workload: workloadToDTO(j.Workload), Duration: j.Duration,
+		ArrivedAt: j.ArrivedAt, PlacedAt: j.PlacedAt, End: j.End,
+		DeviceIDs: j.DeviceIDs, Useful: j.Useful, CostPerHr: j.CostPerHr,
+	}
+}
+
+func eventToDTO(e sim.Event) EventDTO {
+	return EventDTO{Kind: e.Kind, At: e.At, JobID: e.JobID, Node: e.Node, DeviceIDs: e.DeviceIDs}
+}
