@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Headless smoke test for the web demo: builds it, serves the production bundle,
-# and asserts the WASM-rendered DOM contains the expected content for each mode.
-# No Playwright/Puppeteer — just a Chrome/Chromium --dump-dom. Exits non-zero on
-# any missing assertion.
+# and asserts the WASM-rendered DOM contains the expected content for the live
+# cluster screen. No Playwright/Puppeteer — just a Chrome/Chromium --dump-dom.
+# Exits non-zero on any missing assertion.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,14 +42,11 @@ check() {
   done
 }
 
-check "http://localhost:$PORT/?mode=contrast" \
-  "18 devices" "INFERENTIA2" "H100" "type-correct" "16.45"
-check "http://localhost:$PORT/?mode=explain&wl=train-llm&stage=score" \
-  "by score rank" "mi300x-0" "rejected" "trainable"
-check "http://localhost:$PORT/?mode=sandbox" \
-  "author a workload" "feasible"
-check "http://localhost:$PORT/?mode=stream&t=18" \
-  "useful" "wasted" "incoming" "running" "t = 18.0"
+check "http://localhost:$PORT/" \
+  "live cluster" "legacy shadow" "workloads" "machines" \
+  "H100" "INFERENTIA2" "train-llm" "burst" "drain"
+check "http://localhost:$PORT/?seed=7&speed=8" \
+  "seed 7" "speed ×8" "useful"
 
 if [ "$fail" -ne 0 ]; then echo "smoke: FAILED"; exit 1; fi
 echo "smoke: PASSED"

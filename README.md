@@ -14,9 +14,9 @@ read it, run it, and see why it makes each decision. It's a learning project, no
 a production driver.
 
 > **Status:** active development. The single-cluster core is in place: the
-> allocator, a fleet loader, the benchmark, and a real DRA driver that publishes
-> the fleet for the kube-scheduler to select against. A browser demo is in
-> progress.
+> allocator, a fleet loader, the benchmark, a real DRA driver that publishes the
+> fleet for the kube-scheduler to select against, and a browser demo of the
+> scheduler running live.
 
 ## How it works
 
@@ -40,7 +40,8 @@ fork it:
   as `ResourceSlice`s and lets the kube-scheduler select devices using CEL
   generated from the same allocator. A parity test keeps the CEL and the allocator
   from drifting apart.
-- a WASM demo (planned): the allocator compiled to run in the browser.
+- a browser demo (`web/`): the allocator compiled to WASM and driven live in a
+  page, no server involved.
 
 ## What it shows
 
@@ -126,6 +127,38 @@ is. The MI300X wins at $1.90/hr, ahead of an equally capable H100 at $2.50 and a
 B200 at more than three times the price. Every row in the table above is decided
 the same way.
 
+## Try it in the browser
+
+`web/` compiles `allocator` (plus `config`, `report`, and a small `sim` package)
+to WASM and runs the whole scheduler client-side — no backend, just a static
+page. It opens on a cluster that's already running: seeded ambient traffic is
+arriving and being placed before you touch anything.
+
+From there you're operating it, not just watching it. Create a workload
+template — kind, memory floor, required precisions, device count, same-island —
+give it a rate, and it starts showing up in the queue on its own; the burst
+buttons (`×1`, `×5`) fire a batch on demand. Add machines from a small catalog
+(an H100 island, an MI300X island, a couple of Inferentia2s, a cheap batch node)
+and the fleet grows mid-run; drain a node and it stops taking new work, finishes
+what's running, and leaves, kubectl-style.
+
+A shadow strip under the header runs the legacy first-fit scheduler on the exact
+same arrivals and fleet edits, in the background — it's never drawn as a second
+fleet, only as numbers next to Sift's: devices wasted on jobs they can't
+actually run, queue depth, and cost. Same traffic, two outcomes. Click any
+running or queued job in the cluster view and a panel opens with the filter →
+score → bind trace behind its placement (or, for a job still waiting, why
+nothing fits yet).
+
+`?seed=` and `?speed=` are the only two URL params the demo reads: seed fixes the
+ambient-traffic generator so a run is reproducible, speed controls how fast
+simulated time moves. Time only runs forward — there's no scrubbing back.
+
+```sh
+npm --prefix web/app run dev     # local dev server
+npm --prefix web/app run build   # production bundle in web/app/dist
+```
+
 ## Layout
 
 | Path | Purpose |
@@ -136,6 +169,7 @@ the same way.
 | `scenarios/` | Fleet definitions |
 | `cmd/bench/` | Sift-vs-legacy benchmark |
 | `driver/` | DRA driver fork that publishes the fleet (git submodule) |
+| `web/` | Browser demo: the allocator compiled to WASM, driven live |
 | `docs/concepts/` | Notes on the concepts behind the project |
 
 ## Build & test
