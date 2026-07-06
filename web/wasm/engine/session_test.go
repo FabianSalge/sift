@@ -161,3 +161,55 @@ func TestSessionWireFormatKeys(t *testing.T) {
 		}
 	}
 }
+
+// A placed job explains against its placement-time snapshot; the trace must
+// bind exactly the devices the job actually holds.
+func TestSessionExplainPlacedJob(t *testing.T) {
+	s, err := NewSession(sessionFleetJSON(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit([]byte(sessionTrainJob))
+	s.Advance(0)
+	out, err := s.Explain(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tr TraceDTO
+	if err := json.Unmarshal(out, &tr); err != nil {
+		t.Fatal(err)
+	}
+	j, _ := s.sift.Job(0)
+	if len(tr.Bound) != 1 || tr.Bound[0] != j.DeviceIDs[0] {
+		t.Errorf("trace bound %v, want %v", tr.Bound, j.DeviceIDs)
+	}
+}
+
+// A queued job explains against what is taken right now (why nothing fits).
+func TestSessionExplainQueuedJob(t *testing.T) {
+	s, err := NewSession(sessionFleetJSON(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Submit([]byte(sessionTrainJob)) // takes the only trainable device
+	s.Submit([]byte(sessionTrainJob)) // queues
+	s.Advance(0)
+	out, err := s.Explain(1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tr TraceDTO
+	if err := json.Unmarshal(out, &tr); err != nil {
+		t.Fatal(err)
+	}
+	if tr.Err == "" {
+		t.Errorf("queued-job trace should carry a no-fit err, got bound=%v", tr.Bound)
+	}
+}
+
+func TestSessionExplainUnknownJob(t *testing.T) {
+	s, _ := NewSession(sessionFleetJSON(t))
+	if _, err := s.Explain(99); err == nil {
+		t.Error("want error for unknown job id")
+	}
+}

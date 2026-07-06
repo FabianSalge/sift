@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 
 	"github.com/FabianSalge/sift/allocator"
 	"github.com/FabianSalge/sift/sim"
@@ -61,6 +62,21 @@ func (s *Session) Advance(to float64) ([]byte, error) {
 	events := s.sift.Advance(to)
 	s.legacy.Advance(to)
 	return json.Marshal(s.snapshot(events))
+}
+
+// Explain replays jobID's decision. A placed job traces against its stored
+// placement-time allocation snapshot (over the current fleet); a queued job
+// traces against what is taken right now — why nothing fits.
+func (s *Session) Explain(jobID int) ([]byte, error) {
+	j, ok := s.sift.Job(jobID)
+	if !ok {
+		return nil, fmt.Errorf("no job %d", jobID)
+	}
+	alloc := j.AllocSnapshot
+	if j.PlacedAt < 0 {
+		alloc = s.sift.Taken()
+	}
+	return json.Marshal(traceToDTO(allocator.Explain(s.sift.Fleet(), j.Workload, alloc)))
 }
 
 func (s *Session) snapshot(events []sim.Event) ClusterSnapshotDTO {

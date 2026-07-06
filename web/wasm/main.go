@@ -3,6 +3,8 @@
 package main
 
 import (
+	"errors"
+	"strconv"
 	"syscall/js"
 
 	"github.com/FabianSalge/sift/web/wasm/engine"
@@ -36,5 +38,60 @@ func main() {
 	js.Global().Set("siftSimulate", jsonFunc(2, func(a []js.Value) ([]byte, error) {
 		return engine.Simulate([]byte(a[0].String()), []byte(a[1].String()))
 	}))
+
+	var session *engine.Session
+	noSession := errors.New("no session: call siftClusterInit first")
+
+	js.Global().Set("siftClusterInit", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		s, err := engine.NewSession([]byte(a[0].String()))
+		if err != nil {
+			return nil, err
+		}
+		session = s
+		return []byte(`{}`), nil
+	}))
+	js.Global().Set("siftClusterSubmit", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		if session == nil {
+			return nil, noSession
+		}
+		return session.Submit([]byte(a[0].String()))
+	}))
+	js.Global().Set("siftClusterAddNode", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		if session == nil {
+			return nil, noSession
+		}
+		return session.AddNode([]byte(a[0].String()))
+	}))
+	js.Global().Set("siftClusterDrainNode", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		if session == nil {
+			return nil, noSession
+		}
+		node, err := strconv.Atoi(a[0].String())
+		if err != nil {
+			return nil, err
+		}
+		return session.DrainNode(node)
+	}))
+	js.Global().Set("siftClusterAdvance", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		if session == nil {
+			return nil, noSession
+		}
+		t, err := strconv.ParseFloat(a[0].String(), 64)
+		if err != nil {
+			return nil, err
+		}
+		return session.Advance(t)
+	}))
+	js.Global().Set("siftClusterExplain", jsonFunc(1, func(a []js.Value) ([]byte, error) {
+		if session == nil {
+			return nil, noSession
+		}
+		id, err := strconv.Atoi(a[0].String())
+		if err != nil {
+			return nil, err
+		}
+		return session.Explain(id)
+	}))
+
 	select {} // keep the Go runtime alive so the exported funcs stay callable
 }
