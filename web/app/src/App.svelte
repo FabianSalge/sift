@@ -123,7 +123,15 @@
       snap = s
       if (selected) {
         const cur = [...s.running, ...s.queue].find((j) => j.id === selected!.job.id)
-        selected = cur ? { job: cur, trace: selected.trace } : null
+        if (!cur) {
+          selected = null
+        } else {
+          const justPlaced = cur.placedAt >= 0 && selected.job.placedAt < 0
+          selected = { job: cur, trace: selected.trace }
+          // A queued job that just placed has a real "why here" now — refetch
+          // the trace instead of keeping the click-time no-fit ranking.
+          if (justPlaced) selectJob(cur)
+        }
       }
     } catch (e) {
       error = String(e)

@@ -35,6 +35,8 @@ func (s *Session) Submit(jobJSON []byte) ([]byte, error) {
 		return nil, err
 	}
 	w := dto.Workload.toWorkload()
+	// One synchronous call submits to both clusters, so job IDs stay aligned
+	// across the pair — never split or reorder these two submissions.
 	id := s.sift.Submit(w, dto.Duration)
 	s.legacy.Submit(w, dto.Duration)
 	return json.Marshal(map[string]int{"jobID": id})

@@ -175,7 +175,7 @@ func (c *Cluster) complete(t float64) []Event {
 }
 
 // reap removes freed draining devices from the fleet, reporting nodes that
-// emptied as a result. (Task 2 wires DrainNode into this.)
+// emptied as a result.
 func (c *Cluster) reap(t float64, freed []string) []Event {
 	var events []Event
 	for _, id := range freed {

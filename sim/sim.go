@@ -69,6 +69,10 @@ func Run(fleet []allocator.Device, stream Stream) Result {
 func runOne(name string, fleet []allocator.Device, stream Stream, place PlaceFunc) SchedulerResult {
 	c := NewCluster(fleet, place)
 	for _, a := range stream {
+		// Advance twice on purpose: the first flushes completions due at or
+		// before a.At (older queued work grabs freed devices first), the
+		// second places this arrival at exactly a.At. Collapsing them would
+		// change same-instant ordering.
 		c.Advance(a.At)
 		c.Submit(a.Workload, a.Duration)
 		c.Advance(a.At)
