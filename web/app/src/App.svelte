@@ -9,6 +9,7 @@
   import QueueRail from './components/QueueRail.svelte'
   import ShadowStrip from './components/ShadowStrip.svelte'
   import Transport from './components/Transport.svelte'
+  import WorkloadDock from './components/WorkloadDock.svelte'
 
   const params = new URLSearchParams(location.search)
   const seed = Math.abs(Number(params.get('seed') ?? 0)) || 4212
@@ -50,6 +51,10 @@
     const n = (jobCounts.get(t.id) ?? 0) + 1
     jobCounts.set(t.id, n)
     return clusterSubmit({ ...t.workload, name: `${t.id}-${n}` }, duration)
+  }
+
+  async function burst(t: WorkloadTemplate, n: number) {
+    for (let i = 0; i < n; i++) await submitFrom(t, jitter(rng, t.durationS))
   }
 
   async function tick() {
@@ -146,7 +151,9 @@
       <div class="left">
         <Fleet devices={snap.devices} {decorations} />
       </div>
-      <aside class="dock"></aside>
+      <aside class="dock">
+        <WorkloadDock bind:templates onburst={burst} />
+      </aside>
     </main>
   {/if}
 </div>
