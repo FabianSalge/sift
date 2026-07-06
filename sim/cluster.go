@@ -242,6 +242,32 @@ func (c *Cluster) drainQueue() []Event {
 	return events
 }
 
+// AddDevices appends devices to the fleet; queued work may use them on the
+// next Advance. IDs are the caller's responsibility (must be unique).
+func (c *Cluster) AddDevices(devs []allocator.Device) {
+	c.fleet = append(c.fleet, devs...)
+	for _, d := range devs {
+		c.byID[d.ID] = d
+	}
+}
+
+// DrainNode marks every device on node as draining: no new work; free devices
+// leave immediately, busy ones when their running job completes (kubectl
+// drain semantics). Emits node-removed if the node empties at once.
+func (c *Cluster) DrainNode(node int) []Event {
+	var free []string
+	for _, d := range c.fleet {
+		if d.Node != node {
+			continue
+		}
+		c.draining[d.ID] = true
+		if !c.allocated[d.ID] {
+			free = append(free, d.ID)
+		}
+	}
+	return c.reap(c.clock, free)
+}
+
 func copyBools(m map[string]bool) map[string]bool {
 	out := make(map[string]bool, len(m))
 	for k, v := range m {

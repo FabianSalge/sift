@@ -140,3 +140,61 @@ func TestClusterAllocSnapshot(t *testing.T) {
 		}
 	}
 }
+
+func TestClusterAddDevicesUnblocksQueue(t *testing.T) {
+	// Fleet with only the infer ASIC: a train job can never place.
+	c := NewCluster(clusterFixture()[:1], allocator.AllocateSift)
+	id := c.Submit(trainW("a"), 5)
+	c.Advance(1)
+	if j, _ := c.Job(id); j.PlacedAt != -1 {
+		t.Fatalf("job placed with no capable device: %+v", j)
+	}
+	c.AddDevices(clusterFixture()[1:2]) // h100-0 arrives
+	events := c.Advance(2)
+	j, _ := c.Job(id)
+	if j.PlacedAt != 2 || j.DeviceIDs[0] != "h100-0" {
+		t.Fatalf("job = %+v, want placed at 2 on h100-0", j)
+	}
+	if len(events) != 1 || events[0].Kind != "placed" {
+		t.Errorf("events = %+v, want one placed", events)
+	}
+}
+
+func TestClusterDrainIdleNodeRemovesImmediately(t *testing.T) {
+	c := NewCluster(clusterFixture(), allocator.AllocateSift)
+	events := c.DrainNode(0) // inf2-0, idle
+	if len(events) != 1 || events[0].Kind != "node-removed" || events[0].Node != 0 {
+		t.Fatalf("events = %+v, want [node-removed node 0]", events)
+	}
+	if len(c.Fleet()) != 2 {
+		t.Errorf("fleet size = %d, want 2", len(c.Fleet()))
+	}
+}
+
+func TestClusterDrainBusyNodeWaitsForCompletion(t *testing.T) {
+	c := NewCluster(clusterFixture(), allocator.AllocateSift)
+	c.Submit(trainW("a"), 5) // lands on an h100 (node 1)
+	c.Advance(0)
+	if events := c.DrainNode(1); len(events) != 0 {
+		t.Fatalf("busy node removed early: %+v", events)
+	}
+	// Draining node accepts no new work: a second train job must queue.
+	id := c.Submit(trainW("b"), 5)
+	c.Advance(1)
+	if j, _ := c.Job(id); j.PlacedAt != -1 {
+		t.Fatalf("job placed on a draining node: %+v", j)
+	}
+	events := c.Advance(6) // running job ends at 5 → node 1 fully leaves
+	removed := false
+	for _, e := range events {
+		if e.Kind == "node-removed" && e.Node == 1 {
+			removed = true
+		}
+	}
+	if !removed {
+		t.Errorf("no node-removed for node 1 in %+v", events)
+	}
+	if len(c.Fleet()) != 1 || c.Fleet()[0].ID != "inf2-0" {
+		t.Errorf("fleet = %+v, want only inf2-0", c.Fleet())
+	}
+}
