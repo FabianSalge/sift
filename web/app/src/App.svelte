@@ -1,15 +1,17 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import { loadScenario, clusterInit, clusterSubmit, clusterAdvance } from './lib/engine'
+  import { loadScenario, clusterInit, clusterSubmit, clusterAdvance, clusterAddNode, clusterDrainNode } from './lib/engine'
   import type { ClusterSnapshot, Deco } from './lib/types'
   import { DEFAULT_TEMPLATES, type WorkloadTemplate } from './lib/templates'
   import { mulberry32, jitter } from './lib/rng'
   import { Generator } from './lib/traffic'
+  import { MAX_DEVICES, buildNode, type MachineTemplate } from './lib/machines'
   import Fleet from './components/Fleet.svelte'
   import QueueRail from './components/QueueRail.svelte'
   import ShadowStrip from './components/ShadowStrip.svelte'
   import Transport from './components/Transport.svelte'
   import WorkloadDock from './components/WorkloadDock.svelte'
+  import MachineDock from './components/MachineDock.svelte'
 
   const params = new URLSearchParams(location.search)
   const seed = Math.abs(Number(params.get('seed') ?? 0)) || 4212
@@ -57,6 +59,29 @@
     for (let i = 0; i < n; i++) await submitFrom(t, jitter(rng, t.durationS))
   }
 
+  let nextNode = 0
+  let nextIsland = 0
+  const serials = new Map<string, number>()
+
+  async function addMachine(t: MachineTemplate) {
+    if (!snap || snap.devices.length + t.count > MAX_DEVICES) return
+    const serial = serials.get(t.id) ?? 0
+    serials.set(t.id, serial + t.count)
+    const devs = buildNode(t, nextNode++, t.islanded ? nextIsland++ : -1, serial)
+    await clusterAddNode(devs)
+  }
+
+  async function drainNode(node: number) {
+    await clusterDrainNode(node)
+  }
+
+  // A node is "draining" when every one of its remaining devices is.
+  const drainingNodes = $derived.by(() => {
+    const all = new Map<number, boolean>()
+    for (const d of snap?.devices ?? []) all.set(d.node, (all.get(d.node) ?? true) && d.draining)
+    return new Set([...all].filter(([, v]) => v).map(([n]) => n))
+  })
+
   async function tick() {
     if (paused || ticking || loading || error) return
     ticking = true
@@ -92,6 +117,12 @@
     try {
       const yaml = await (await fetch(`${base}scenarios/realistic-2026.yaml`)).text()
       const fleet = await loadScenario(yaml)
+      for (const d of fleet) {
+        nextNode = Math.max(nextNode, d.node + 1)
+        nextIsland = Math.max(nextIsland, d.island + 1)
+        const model = d.id.replace(/-\d+$/, '')
+        serials.set(model, (serials.get(model) ?? 0) + 1)
+      }
       await clusterInit(fleet)
       snap = await clusterAdvance(0)
     } catch (e) {
@@ -149,10 +180,11 @@
 
     <main class="canvas">
       <div class="left">
-        <Fleet devices={snap.devices} {decorations} />
+        <Fleet devices={snap.devices} {decorations} ondrain={drainNode} {drainingNodes} />
       </div>
       <aside class="dock">
         <WorkloadDock bind:templates onburst={burst} />
+        <MachineDock deviceCount={snap.devices.length} onadd={addMachine} />
       </aside>
     </main>
   {/if}

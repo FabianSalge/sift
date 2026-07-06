@@ -9,11 +9,15 @@
     selectedID = null,
     decorations,
     onselect,
+    ondrain,
+    drainingNodes,
   }: {
     devices: Device[]
     selectedID?: string | null
     decorations?: Map<string, Deco>
     onselect?: (d: Device) => void
+    ondrain?: (node: number) => void
+    drainingNodes?: Set<number>
   } = $props()
 
   const groups = $derived(groupFleet(devices))
@@ -24,7 +28,14 @@
 <div class="fleet">
   {#each groups as g (g.node)}
     <div class="node">
-      <div class="node-hd label">node {g.node}</div>
+      <div class="node-hd">
+        <span class="label">node {g.node}</span>
+        {#if drainingNodes?.has(g.node)}
+          <span class="draining mono">draining…</span>
+        {:else if ondrain}
+          <button class="drain" title="drain node {g.node}: finish running jobs, then remove it" onclick={() => ondrain(g.node)}>drain</button>
+        {/if}
+      </div>
       <div class="pods">
         {#each g.pods as pod (pod.island)}
           <div
@@ -71,7 +82,31 @@
     background: var(--bg-2);
   }
   .node-hd {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
     margin-bottom: 9px;
+  }
+  .drain {
+    appearance: none;
+    border: none;
+    background: none;
+    color: var(--ink-faint);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.12s, color 0.12s;
+  }
+  .node:hover .drain { opacity: 1; }
+  .drain:hover { color: var(--reject); }
+  .draining {
+    font-size: 9px;
+    color: var(--accent);
   }
 
   .pods {
