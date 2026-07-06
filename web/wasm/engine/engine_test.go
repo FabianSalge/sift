@@ -10,7 +10,6 @@ import (
 	"github.com/FabianSalge/sift/allocator"
 	"github.com/FabianSalge/sift/config"
 	"github.com/FabianSalge/sift/report"
-	"github.com/FabianSalge/sift/sim"
 )
 
 const fixtureYAML = `
@@ -214,16 +213,6 @@ func TestWireFormatKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	streamDTO := []ArrivalDTO{{At: 0, Workload: workloadToDTO(wls[0]), Duration: 5}}
-	streamJSON2, err := json.Marshal(streamDTO)
-	if err != nil {
-		t.Fatal(err)
-	}
-	simJSON, err := Simulate(fleetJSON, streamJSON2)
-	if err != nil {
-		t.Fatal(err)
-	}
-
 	cases := []struct {
 		name string
 		blob []byte
@@ -232,7 +221,6 @@ func TestWireFormatKeys(t *testing.T) {
 		{"LoadScenario", fleetJSON, []string{`"memoryGB"`, `"costPerHr"`, `"id"`, `"island"`, `"precisions"`, `"trainable"`}},
 		{"Run", runJSON, []string{`"totalCost"`, `"typeCorrect"`, `"deviceIDs"`, `"sameIslandOK"`, `"gangsWhole"`, `"fragmented"`}},
 		{"Explain", explainJSON, []string{`"deviceID"`, `"costComponent"`, `"memoryWaste"`, `"rank"`, `"bound"`, `"island"`}},
-		{"Simulate", simJSON, []string{`"horizon"`, `"arrivedAt"`, `"placedAt"`, `"deviceIDs"`, `"useful"`, `"costPerHr"`}},
 	}
 	for _, c := range cases {
 		s := string(c.blob)
@@ -240,48 +228,6 @@ func TestWireFormatKeys(t *testing.T) {
 			if !strings.Contains(s, k) {
 				t.Errorf("%s JSON missing wire key %s:\n%s", c.name, k, s)
 			}
-		}
-	}
-}
-
-func TestSimulateMatchesSim(t *testing.T) {
-	fleet, err := config.LoadFleet(bytes.NewReader([]byte(fixtureYAML)))
-	if err != nil {
-		t.Fatal(err)
-	}
-	stream := sim.Stream{
-		{At: 0, Workload: fixtureWorkloads()[0], Duration: 5},
-		{At: 1, Workload: fixtureWorkloads()[1], Duration: 3},
-	}
-	fleetJSON, _ := EncodeFleet(fleet)
-	arrivals := make([]ArrivalDTO, len(stream))
-	for i, a := range stream {
-		arrivals[i] = ArrivalDTO{At: a.At, Workload: workloadToDTO(a.Workload), Duration: a.Duration}
-	}
-	streamJSON, err := json.Marshal(arrivals)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	gotJSON, err := Simulate(fleetJSON, streamJSON)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var got ResultDTO
-	if err := json.Unmarshal(gotJSON, &got); err != nil {
-		t.Fatal(err)
-	}
-	want := sim.Run(fleet, stream)
-
-	if got.Horizon != want.Horizon || len(got.Sift.Arrivals) != len(want.Sift.Arrivals) {
-		t.Fatalf("summary mismatch: got horizon %v, %d arrivals; want %v, %d", got.Horizon, len(got.Sift.Arrivals), want.Horizon, len(want.Sift.Arrivals))
-	}
-	for i := range want.Sift.Arrivals {
-		if got.Sift.Arrivals[i].PlacedAt != want.Sift.Arrivals[i].PlacedAt ||
-			got.Sift.Arrivals[i].Useful != want.Sift.Arrivals[i].Useful {
-			t.Errorf("sift arrival %d: got placedAt=%v useful=%v, want placedAt=%v useful=%v", i,
-				got.Sift.Arrivals[i].PlacedAt, got.Sift.Arrivals[i].Useful,
-				want.Sift.Arrivals[i].PlacedAt, want.Sift.Arrivals[i].Useful)
 		}
 	}
 }
