@@ -2,7 +2,7 @@
 // calls. All scheduling logic lives in the wasm (the pure allocator core); this
 // module only loads it and marshals strings. See web/wasm + ADR-0003.
 
-import type { Device, Workload, Report, Trace, Arrival, SimResult } from './types'
+import type { Device, Workload, Report, Trace, Arrival, SimResult, ClusterSnapshot } from './types'
 
 const BASE = import.meta.env.BASE_URL
 
@@ -20,6 +20,12 @@ declare global {
   function siftRun(fleetJSON: string, workloadsJSON: string): Envelope
   function siftExplain(fleetJSON: string, workloadJSON: string, allocatedJSON: string): Envelope
   function siftSimulate(fleetJSON: string, streamJSON: string): Envelope
+  function siftClusterInit(fleetJSON: string): Envelope
+  function siftClusterSubmit(jobJSON: string): Envelope
+  function siftClusterAddNode(devicesJSON: string): Envelope
+  function siftClusterDrainNode(node: string): Envelope
+  function siftClusterAdvance(t: string): Envelope
+  function siftClusterExplain(jobID: string): Envelope
 }
 
 let ready: Promise<void> | null = null
@@ -90,4 +96,35 @@ export async function explain(
 export async function simulate(fleet: Device[], stream: Arrival[]): Promise<SimResult> {
   await initEngine()
   return call(siftSimulate(JSON.stringify(fleet), JSON.stringify(stream)), 'simulate') as SimResult
+}
+
+export async function clusterInit(fleet: Device[]): Promise<void> {
+  await initEngine()
+  call(siftClusterInit(JSON.stringify(fleet)), 'clusterInit')
+}
+
+export async function clusterSubmit(workload: Workload, duration: number): Promise<number> {
+  await initEngine()
+  const r = call(siftClusterSubmit(JSON.stringify({ workload, duration })), 'clusterSubmit') as { jobID: number }
+  return r.jobID
+}
+
+export async function clusterAddNode(devices: Device[]): Promise<void> {
+  await initEngine()
+  call(siftClusterAddNode(JSON.stringify(devices)), 'clusterAddNode')
+}
+
+export async function clusterDrainNode(node: number): Promise<void> {
+  await initEngine()
+  call(siftClusterDrainNode(String(node)), 'clusterDrainNode')
+}
+
+export async function clusterAdvance(t: number): Promise<ClusterSnapshot> {
+  await initEngine()
+  return call(siftClusterAdvance(String(t)), 'clusterAdvance') as ClusterSnapshot
+}
+
+export async function clusterExplain(jobID: number): Promise<Trace> {
+  await initEngine()
+  return call(siftClusterExplain(String(jobID)), 'clusterExplain') as Trace
 }

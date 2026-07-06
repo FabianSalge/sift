@@ -146,3 +146,48 @@ export interface SimResult {
   sift: SchedulerSim
   legacy: SchedulerSim
 }
+
+// ── live cluster session (mirrors web/wasm/engine ClusterSnapshotDTO) ───────
+export interface ClusterDevice extends Device {
+  jobID: number // -1 when idle
+  draining: boolean
+}
+
+export interface ClusterJob {
+  id: number
+  workload: Workload
+  duration: number
+  arrivedAt: number
+  placedAt: number // -1 while queued
+  end: number // -1 while queued
+  deviceIDs: string[] | null
+  useful: boolean
+  costPerHr: number
+}
+
+export interface ClusterEvent {
+  kind: 'placed' | 'completed' | 'node-removed'
+  at: number
+  jobID: number
+  node: number
+  deviceIDs: string[] | null
+}
+
+export interface ShadowMetrics {
+  busy: number
+  wasted: number
+  queue: number
+  usefulDone: number
+  cost: number
+}
+
+export interface ClusterSnapshot {
+  clock: number
+  devices: ClusterDevice[]
+  queue: ClusterJob[]
+  running: ClusterJob[]
+  usefulDone: number
+  cost: number
+  events: ClusterEvent[] | null
+  shadow: ShadowMetrics
+}
